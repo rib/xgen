@@ -1,4 +1,4 @@
-SUBDIRS = src
+SUBDIRS = tools src tests
 #SUBDIRS += doc
 
 

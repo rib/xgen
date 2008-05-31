@@ -1,43 +1,42 @@
+lib_LTLIBRARIES = libgx-@GX_MAJOR_VERSION@.@GX_MINOR_VERSION@.la
 
-bin_PROGRAMS = gx
+BUILT_SOURCES=gx-connection-gen.c
+gx-connection-gen.c:
+	$(top_builddir)/tools/gx-gen
+	$(top_srcdir)/tools/post_process.sh
 
-GX_SOURCES = gx.c
+#libgx_@GX_MAJOR_VERSION@_@GX_MINOR_VERSION@_la_SOURCES = \
+#gx-connection.c gx-drawable.c gx-pixmap.c gx-window.c
+libgx_@GX_MAJOR_VERSION@_@GX_MINOR_VERSION@_la_SOURCES = \
+	gx-connection.c \
+	gx-connection.h \
+	gx-drawable.c \
+	gx-drawable.h \
+	gx-window.c \
+	gx-window.h \
+	gx-gcontext.c \
+	gx-gcontext.h \
+	gx-screen.c \
+	gx-screen.h
 
-#gx_LDADD =
-gx_LDFLAGS = -export-dynamic
-gx_CFLAGS = @EXTRA_CFLAGS@
-gx_CPPFLAGS = \
-    -DGX_GLADEDIR=\""$(datadir)/gx/glade/"\" \
-    -DGNOME_ICONDIR=\""$(datadir)/pixmaps"\" \
-    -DSHARE_DIR=\"$(pkgdatadir)\" \
-    -DGX_LOCALEDIR=\""$(gxlocaledir)"\" \
-    -DGX_BIN_DIR=\""$(bindir)"\" \
-    -I$(top_srcdir) \
-    -I$(top_srcdir)/src \
-    @EXTRA_CPPFLAGS@
+#libgx_@GX_MAJOR_VERSION@_@GX_MINOR_VERSION@_la_LDADD =
+libgx_@GX_MAJOR_VERSION@_@GX_MINOR_VERSION@_la_LDFLAGS = \
+	@GX_DEP_LIBS@ \
+  	-version-info $(GX_LT_CURRENT):$(GX_LT_REVISION):$(GX_LT_AGE) \
+	-export-dynamic \
+	-export-symbols-regex "^gx_.*"
+libgx_@GX_MAJOR_VERSION@_@GX_MINOR_VERSION@_la_CFLAGS = \
+	@EXTRA_CFLAGS@ @GX_DEP_CFLAGS@
+libgx_@GX_MAJOR_VERSION@_@GX_MINOR_VERSION@_la_CPPFLAGS = \
+	@EXTRA_CPPFLAGS@ \
+	-I$(top_srcdir)/ \
+	-I$(top_srcdir)/src \
+	-I$(top_builddir)/src
 
-gladedir = $(datadir)/gx/glade/
-glade_DATA = \
-    data/glade/gx.glade
 
-#uidir = $(datadir)/gx/ui/
-#ui_DATA = \
-#    data/ui/toolbar-menu-ui.xml
+#EXTRA_DIST =
 
-gnomemenudir = $(datadir)/applications
-gnomemenu_in_files = data/gx.desktop.in
-gnomemenu_DATA = $(gnomemenu_premerge_files:.desktop.in=.desktop)
+#CLEANFILES =
 
-EXTRA_DIST = \
-    $(glade_DATA) \
-    $(gnomemenu_DATA)
-#    $(ui_DATA)
-
-#@INTLTOOL_DESKTOP_RULE@
-
-CLEANFILES = \
-	$(gnomemenu_DATA)
-
-DISTCLEANFILES = \
-	$(DISTCLEANFILES)
+#DISTCLEANFILES =
 

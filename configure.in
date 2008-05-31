@@ -2,12 +2,80 @@ dnl Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.59)
 
-AC_INIT(gx, [0.1.0])
-AC_CONFIG_SRCDIR(src/gx.c)
+dnl ================================================================
+dnl Package version (i.e. the pretty number that users see)
+dnl ================================================================
+m4_define([gx_major_version], [0])
+m4_define([gx_minor_version], [1])
+m4_define([gx_micro_version], [0])
+m4_define([gx_version],
+          [gx_major_version.gx_minor_version.gx_micro_version])
+
+dnl ================================================================
+dnl Interface version details for libtool
+dnl ================================================================
+# NB: I didn't copy the widely used glib/gtk style of dealing with libtool
+# versioning since I found the different (compared to libtool's documentation)
+# ideas for what the interface age should represent; and the addition of a
+# binary age confusing. I couldn't find any documentation/mailing list archives
+# etc explaing the ideas nor any code that makes use of those values. They also
+# seem to go against the advice of not basing the libtool versioning on package
+# versioning.
+# 
+# For reference on how the various numbers should be updated at release time
+# these rules are adapted from the libtool info pages:
+#
+#  1. Update the version information only immediately before a public
+#     release of your software.
+#
+#  2. If the library source code has changed at all since the last
+#     update, then increment REVISION (`C:R:A' becomes `C:r+1:A').
+#
+#  3. If any interfaces have been added, removed, or changed since the
+#     last update, increment CURRENT, and set REVISION to 0.
+#
+#  4. If any interfaces have been added since the last public release,
+#     then increment AGE.
+#
+#  5. If any interfaces have been removed since the last public release,
+#     then set AGE to 0.
+m4_define([gx_lt_current], 0)
+m4_define([gx_lt_revision], 0)
+m4_define([gx_lt_age], 0)
+# We do also tell libtool the pretty version also:
+m4_define([gx_lt_release], [gx_version])
+
+AC_INIT(gx, [gx_version])
+AC_CONFIG_SRCDIR(src/gx-connection.c)
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_HEADERS(config.h)
 AM_INIT_AUTOMAKE([gnu])
 
+dnl ================================================================
+dnl More version number stuff
+dnl ================================================================
+GX_MAJOR_VERSION=gx_major_version
+GX_MINOR_VERSION=gx_minor_version
+GX_MICRO_VERSION=gx_micro_version
+GX_VERSION=gx_version
+
+AC_SUBST(GX_MAJOR_VERSION)
+AC_SUBST(GX_MINOR_VERSION)
+AC_SUBST(GX_MICRO_VERSION)
+AC_SUBST(GX_VERSION)
+
+
+dnl ================================================================
+dnl libtool versioning
+dnl ================================================================
+GX_LT_CURRENT=gx_lt_current
+GX_LT_REVISION=gx_lt_revision
+GX_LT_AGE=gx_lt_age
+GX_LT_RELEASE=gx_lt_release
+AC_SUBST(GX_LT_CURRENT)
+AC_SUBST(GX_LT_REVISION)
+AC_SUBST(GX_LT_AGE)
+AC_SUBST(GX_LT_RELEASE)
 
 AM_MAINTAINER_MODE
 
@@ -21,25 +89,20 @@ AC_ARG_ENABLE(debug,
     [enable debuging messages]),
   [
    if test $enableval = yes; then 
-
      AC_DEFINE(_DEBUG, 1, "define to enable debuging")
 
-     dnl (This is for removing the default -O2 not adding -g)
-     CFLAGS="-g -O0"
+     CFLAGS="-g3 -O0"
      EXTRA_CFLAGS="-Wall -Werror"
-     SILENT="#"
    else
     if test -z $CFLAGS; then
-     CFLAGS="-g -O2"
+     CFLAGS="-g3 -O2"
     fi
-     SILENT=".SILENT"
    fi
   ],
   [
    if test -z $CFLAGS; then
-        CFLAGS="-g -O2"
+    CFLAGS="-g3 -O2"
    fi
-   SILENT=".SILENT"
   ])
 
 
@@ -109,12 +172,19 @@ dnl ================================================================
 dnl Check for dependency packages.
 dnl ================================================================
 PKG_CHECK_MODULES(GX_DEP, [
-		  gtk+-2.0 >= 2.2 
-		  glib-2.0 >= 2.2 
-		  libglade-2.0 >= 2.0 
-		  gthread-2.0
+                  xcb
+		  glib-2.0 >= 2.16
+                  gobject-2.0
 ])
+AC_SUBST(GX_DEP_CFLAGS)
+AC_SUBST(GX_DEP_LIBS)
 
+PKG_CHECK_MODULES(GXGEN_DEP, [
+                  glib-2.0 >= 2.16
+                  libxml-2.0
+])
+AC_SUBST(GXGEN_DEP_CFLAGS)
+AC_SUBST(GXGEN_DEP_LIBS)
 
 dnl ================================================================
 dnl Misc program dependencies.
@@ -143,8 +213,6 @@ dnl What needs to be substituted in other files
 dnl ================================================================
 AC_SUBST(EXTRA_CFLAGS)
 AC_SUBST(EXTRA_CPPFLAGS)
-AC_SUBST(GX_DEP_CFLAGS)
-AC_SUBST(GX_DEP_LIBS)
 
 
 dnl ================================================================
@@ -152,7 +220,9 @@ dnl Dah Da!
 dnl ================================================================
 AC_OUTPUT(
 Makefile 
+tools/Makefile
 src/Makefile
+tests/Makefile
 dnl po/Makefile.in
 dnl gx-0.1.0.pc
 )
