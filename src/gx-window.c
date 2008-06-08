@@ -35,13 +35,12 @@
 
 /* Enums/Typedefs */
 /* add your signals here */
-#if 0
 enum
 {
-  SIGNAL_NAME,
+  EVENT_SIGNAL,
+#include "gx-window-signals-enum-gen.h"
   LAST_SIGNAL
 };
-#endif
 
 enum
 {
@@ -75,7 +74,7 @@ struct _GXWindowPrivate
 
 
 /* Function definitions */
-static void gx_window_class_init (GXWindowClass * klass);
+static void gx_window_class_init (_GXWindowClass * klass);
 static void gx_window_get_property (GObject * object,
 				    guint id,
 				    GValue * value, GParamSpec * pspec);
@@ -94,7 +93,7 @@ static void gx_window_finalize (GObject * self);
 
 /* Variables */
 static GXDrawableClass *parent_class = NULL;
-/* static guint gx_window_signals[LAST_SIGNAL] = { 0 }; */
+static guint gx_window_signals[LAST_SIGNAL] = { 0 };
 
 GHashTable *xid_to_windows_map = NULL;
 
@@ -106,7 +105,7 @@ gx_window_get_type (void)	/* Typechecking */
   if (!self_type)
     {
       static const GTypeInfo object_info = {
-	  sizeof (GXWindowClass),	/* class structure size */
+	  sizeof (_GXWindowClass),	/* class structure size */
 	  NULL,			/* base class initializer */
 	  NULL,			/* base class finalizer */
 	  (GClassInitFunc) gx_window_class_init,	/* class initializer */
@@ -144,7 +143,7 @@ gx_window_get_type (void)	/* Typechecking */
 }
 
 static void
-gx_window_class_init (GXWindowClass * klass)	/* Class Initialization */
+gx_window_class_init (_GXWindowClass * klass)	/* Class Initialization */
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GParamSpec *new_param;
@@ -258,7 +257,7 @@ gx_window_class_init (GXWindowClass * klass)	/* Class Initialization */
     g_signal_new ("signal_name",	/* name */
 		  G_TYPE_FROM_CLASS (klass),	/* interface GType */
 		  G_SIGNAL_RUN_LAST,	/* signal flags */
-		  G_STRUCT_OFFSET (GXWindowClass, signal_member), NULL,	/* accumulator */
+		  G_STRUCT_OFFSET (_GXWindowClass, signal_member), NULL,	/* accumulator */
 		  NULL,	/* accumulator data */
 		  g_cclosure_marshal_VOID__VOID,	/* c marshaller */
 		  G_TYPE_NONE,	/* return type */
@@ -267,6 +266,21 @@ gx_window_class_init (GXWindowClass * klass)	/* Class Initialization */
     );
 #endif
 
+  klass->event = NULL;
+  gx_window_signals[EVENT_SIGNAL] =
+    g_signal_new ("event",	/* name */
+		  G_TYPE_FROM_CLASS (klass),	/* interface GType */
+		  G_SIGNAL_RUN_LAST,	/* signal flags */
+		  G_STRUCT_OFFSET (_GXWindowClass, event), NULL,	/* accumulator */
+		  NULL,	/* accumulator data */
+		  g_cclosure_marshal_VOID__VOID,	/* c marshaller */
+		  G_TYPE_NONE,	/* return type */
+		  0	/* number of parameters */
+		  /* vararg, list of param types */
+    );
+
+#include "gx-window-new-signals-gen.c"
+
   g_type_class_add_private (klass, sizeof (GXWindowPrivate));
 }
 
@@ -274,7 +288,7 @@ static void
 gx_window_get_property (GObject * object,
 			guint id, GValue * value, GParamSpec * pspec)
 {
-  GXWindow* self = GX_WINDOW(object);
+  //GXWindow* self = GX_WINDOW(object);
 
   switch (id)
     {

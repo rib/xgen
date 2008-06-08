@@ -40,14 +40,14 @@ G_BEGIN_DECLS
 #define GX_WINDOW_CLASS(klass)	  (G_TYPE_CHECK_CLASS_CAST ((klass), GX_TYPE_WINDOW, GXWindowClass))
 #define GX_IS_WINDOW(obj)	  (G_TYPE_CHECK_INSTANCE_Type ((obj), GX_TYPE_WINDOW))
 #define GX_IS_WINDOW_CLASS(klass) (G_TYPE_CHECK_CLASS_Type ((klass), GX_TYPE_WINDOW))
-#define GX_WINDOW_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GX_TYPE_WINDOW, GXWindowClass))
+#define GX_WINDOW_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GX_TYPE_WINDOW, _GXWindowClass))
 
 #ifndef GX_WINDOW_TYPEDEF
 typedef struct _GXWindow GXWindow;
 #define GX_WINDOW_TYPEDEF
 #endif
 
-typedef struct _GXWindowClass GXWindowClass;
+typedef struct __GXWindowClass _GXWindowClass;
 typedef struct _GXWindowPrivate GXWindowPrivate;
 
 struct _GXWindow
@@ -61,13 +61,15 @@ struct _GXWindow
   GXWindowPrivate *priv;
 };
 
-struct _GXWindowClass
+struct __GXWindowClass
 {
   /* add your parent class here */
   GXDrawableClass parent_class;
 
   /* add signals here */
-  /* void (* signal) (GXWindow *object); */
+#include "gx-window-signal-callbacks-gen.h"
+
+  void (* event) (GXConnection *object, GXGenericEvent *event);
 };
 
 GType gx_window_get_type (void);
@@ -95,3 +97,4 @@ _gx_window_find_from_xid (guint32 xid);
 
 G_END_DECLS
 #endif /* GX_WINDOW_H */
+

@@ -80,7 +80,7 @@ struct _GXConnectionClass
   GObjectClass parent_class;
 
   /* add signals here */
-  /* void (* signal) (GXConnection *object); */
+  void (* event) (GXConnection *object, GXGenericEvent *event);
 };
 
 GType gx_connection_get_type(void);

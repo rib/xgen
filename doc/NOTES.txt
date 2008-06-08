@@ -1,0 +1,13 @@
+
+NB: gotchas:
+
+The gx_window_get/set_property functions are awkward since gobjects
+use such names to set object properties, but in X11 terms they would
+send and retrieve X Window properties to/from the xserver.
+
+Currently gx_window_get/set_property correspond to the gobject
+varient and we have gx_window_get/set_xproperty for the X11 kind.
+
+The xproto defines an enum that should be named GXWindowClass, but
+that conflicts with the the class definition for GXWindow objects.
+

@@ -29,6 +29,7 @@
 #include <glib.h>
 
 #include <xcb/xcb.h>
+#include <xcb/xcbext.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -37,12 +38,10 @@
 
 /* Enums/Typedefs */
 /* add your signals here */
-#if 0
 enum {
-    SIGNAL_NAME,
+    EVENT_SIGNAL,
     LAST_SIGNAL
 };
-#endif
 
 enum {
     PROP_0,
@@ -51,14 +50,16 @@ enum {
 
 struct _GXConnectionPrivate
 {
-  gchar *display;
-  int screen_num;
-  xcb_screen_t *screen;
+  xcb_connection_t  *xcb_connection;
+  gchar		    *display;
+  int		     screen_num;
+  xcb_screen_t	    *screen;
+  GXWindow	    *root;
 
-  GXWindow *root;
-
-  xcb_connection_t *xcb_connection;
-
+  /* NB: This mechanism wouldn't be needed if only xcb had
+   * a way to poll for replies without needing to pass a
+   * sequence number. */
+  GQueue	    *pending_reply_sequences;
 };
 
 
@@ -81,7 +82,7 @@ static void gx_connection_finalize(GObject *self);
 
 /* Variables */
 static GObjectClass *parent_class = NULL;
-//static guint gx_connection_signals[LAST_SIGNAL] = { 0 };
+static guint gx_connection_signals[LAST_SIGNAL] = { 0 };
 
 GType
 gx_connection_get_type(void) /* Typechecking */
@@ -205,6 +206,18 @@ gx_connection_class_init(GXConnectionClass *klass) /* Class Initialization */
 		 /* vararg, list of param types */
     );
 #endif
+  klass->event = NULL;
+  gx_connection_signals[EVENT_SIGNAL] =
+    g_signal_new ("event",	/* name */
+		  G_TYPE_FROM_CLASS (klass),	/* interface GType */
+		  G_SIGNAL_RUN_LAST,	/* signal flags */
+		  G_STRUCT_OFFSET (GXConnectionClass, event), NULL,	/* accumulator */
+		  NULL,	/* accumulator data */
+		  g_cclosure_marshal_VOID__VOID,	/* c marshaller */
+		  G_TYPE_NONE,	/* return type */
+		  0	/* number of parameters */
+		  /* vararg, list of param types */
+    );
 
   g_type_class_add_private(klass, sizeof(GXConnectionPrivate));
 }
@@ -283,33 +296,35 @@ gx_connection_mydoable_interface_init(gpointer interface,
 
 /* Instance Construction */
 static void
-gx_connection_init(GXConnection *self)
+gx_connection_init (GXConnection *self)
 {
-  self->priv = GX_CONNECTION_GET_PRIVATE(self);
+  self->priv = GX_CONNECTION_GET_PRIVATE (self);
   /* populate your object here */
+
+  self->priv->pending_reply_sequences = g_queue_new ();
 }
 
 /* Instantiation wrapper */
 GXConnection *
-gx_connection_new(const char *display)
+gx_connection_new (const char *display)
 {
   GXConnection *self =
-    GX_CONNECTION(g_object_new(gx_connection_get_type(),
-                  "display", display, NULL));
+    GX_CONNECTION (g_object_new (gx_connection_get_type (),
+                   "display", display, NULL));
 
   return self;
 }
 
 /* Instance Destruction */
 void
-gx_connection_finalize(GObject *object)
+gx_connection_finalize (GObject *object)
 {
-  /* GXConnection *self = GX_CONNECTION(object); */
+  GXConnection *self = GX_CONNECTION (object);
 
-  /* destruct your object here */
-  G_OBJECT_CLASS(parent_class)->finalize(object);
+  g_queue_free (self->priv->pending_reply_sequences);
+
+  G_OBJECT_CLASS (parent_class)->finalize (object);
 }
-
 
 
 /* add new methods here */
@@ -397,6 +412,185 @@ screen_of_connection (xcb_connection_t *c,
   return NULL;
 }
 
+static void
+check_for_any_reply_or_error (GXConnection *connection,
+			      void **reply,
+			      xcb_generic_error_t **error)
+{
+  xcb_connection_t *xcb_connection =
+    gx_connection_get_xcb_connection (connection);
+  GList *tmp;
+
+  g_return_if_fail (*reply == NULL);
+  g_return_if_fail (*error == NULL);
+
+  for (tmp = connection->priv->pending_reply_sequences->head;
+       tmp != NULL;
+       tmp = tmp->next)
+  {
+    unsigned int request = GPOINTER_TO_INT (tmp->data);
+    xcb_poll_for_reply (xcb_connection, request, reply, error);
+    if (reply || error)
+      g_queue_remove (connection->priv->pending_reply_sequences, tmp->data);
+  }
+}
+
+typedef struct
+{
+  GSource	       source;
+
+  GPollFD	       xcb_poll_fd;
+
+  GXConnection	      *connection;
+
+  xcb_generic_event_t *event;
+  void		      *reply;
+  xcb_generic_error_t *error;
+
+}GXXCBFDSource;
+
+static gboolean
+xcb_event_prepare (GSource *source,
+                   gint    *timeout)
+{
+  GXXCBFDSource *xcb_source = (GXXCBFDSource *)source;
+  xcb_connection_t *xcb_connection =
+    gx_connection_get_xcb_connection (xcb_source->connection);
+
+  g_assert (!xcb_source->event);
+  xcb_source->event = xcb_poll_for_event (xcb_connection);
+  if (xcb_source->event)
+    return TRUE;
+
+  /* TODO: This doesn't seem to be a very nice way to have to deal with
+   * replies, but xcb does not currently have a xcb_poll_for_any_reply()
+   * function and so you have to pass xcb a specific sequence number.
+   */
+  g_assert (!xcb_source->reply);
+  check_for_any_reply_or_error (xcb_source->connection,
+				&xcb_source->reply,
+				&xcb_source->error);
+  if (xcb_source->reply || xcb_source->error)
+    return TRUE;
+
+  /* We don't mind how long poll() will block */
+  *timeout = -1;
+
+  return FALSE;
+}
+
+static gboolean
+xcb_event_check (GSource *source)
+{
+  GXXCBFDSource *xcb_source = (GXXCBFDSource *)source;
+
+  if (xcb_source->xcb_poll_fd.revents & G_IO_IN)
+    return TRUE;
+
+  return FALSE;
+}
+
+static void
+signal_event (GXConnection *connection, xcb_generic_event_t *event)
+{
+  static guint event_signal = 0;
+
+  g_print ("event\n");
+
+  if (!event_signal)
+    event_signal = g_signal_lookup ("event", GX_TYPE_CONNECTION);
+
+  /* FIXME - we should be able to determine the event window of an
+   * event and send the signal from the corresponding GXWindow. */
+
+  /* TODO: we should use the name of the signal as the detail */
+  g_signal_emit (connection, event_signal, 0, event);
+
+}
+
+static void
+signal_reply (GXConnection *connection, xcb_generic_reply_t *reply)
+{
+  g_print ("reply\n");
+}
+
+static void
+signal_error (GXConnection *connection, xcb_generic_error_t *error)
+{
+  g_print ("error\n");
+}
+
+static gboolean
+xcb_event_dispatch (GSource *source, GSourceFunc callback, gpointer data)
+{
+  GXXCBFDSource	      *xcb_source = (GXXCBFDSource *)source;
+  xcb_connection_t    *xcb_connection =
+    gx_connection_get_xcb_connection (xcb_source->connection);
+  xcb_generic_event_t *event;
+  void		      *reply;
+  xcb_generic_error_t *error;
+
+
+  xcb_source->event = NULL;
+  event = xcb_source->event;
+
+  xcb_source->reply = NULL;
+  reply = xcb_source->reply;
+
+  xcb_source->error = NULL;
+  error = xcb_source->error;
+
+  do
+    {
+      if (event)
+	signal_event (xcb_source->connection, event);
+      event = xcb_poll_for_event (xcb_connection);
+
+      if (reply)
+	signal_reply (xcb_source->connection, reply);
+      else if (error)
+	signal_error (xcb_source->connection, error);
+      check_for_any_reply_or_error (xcb_source->connection,
+				    &reply,
+				    &error);
+
+    } while (event || reply || error);
+
+  return TRUE;
+}
+
+static GSourceFuncs xcb_source_funcs = {
+  .prepare = xcb_event_prepare,
+  .check = xcb_event_check,
+  .dispatch = xcb_event_dispatch,
+  .finalize = NULL,
+};
+
+static void
+add_xcb_event_source(GXConnection *self)
+{
+  GSource *source;
+  GXXCBFDSource *xcb_source;
+  int fd;
+
+  fd = xcb_get_file_descriptor (self->priv->xcb_connection);
+
+  source = g_source_new (&xcb_source_funcs, sizeof (GXXCBFDSource));
+  /* g_source_set_priority (source, ); */
+
+  xcb_source = (GXXCBFDSource *)source;
+  xcb_source->connection = self;
+  xcb_source->event = NULL;
+  xcb_source->reply = NULL;
+  xcb_source->error = NULL;
+  xcb_source->xcb_poll_fd.fd = fd;
+  xcb_source->xcb_poll_fd.events = G_IO_IN;
+
+  g_source_add_poll (source, &xcb_source->xcb_poll_fd);
+  g_source_set_can_recurse (source, TRUE);
+  g_source_attach (source, NULL);
+}
+
 static gboolean
 connect_to_display (GXConnection *self, const char *display)
 {
@@ -419,6 +613,8 @@ connect_to_display (GXConnection *self, const char *display)
 			     "wrap", TRUE,
 			     NULL));
 
+  add_xcb_event_source (self);
+
   return TRUE;
 }
 
@@ -436,5 +632,12 @@ gx_connection_flush (GXConnection *connection, gboolean flush_server)
   //else
     xcb_flush(connection->priv->xcb_connection);
 }
+
+void
+gx_main(void)
+{
+
+}
+
 #include "gx-connection-gen.c"
 

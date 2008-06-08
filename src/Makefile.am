@@ -1,9 +1,21 @@
 lib_LTLIBRARIES = libgx-@GX_MAJOR_VERSION@.@GX_MINOR_VERSION@.la
 
-BUILT_SOURCES=gx-connection-gen.c
-gx-connection-gen.c:
-	$(top_builddir)/tools/gx-gen
-	$(top_srcdir)/tools/post_process.sh
+EXTENSION_XML = xproto.xml
+EXTENSION_XML += shape.xml
+EXTENSION_XML += render.xml
+# depends on shape + render
+EXTENSION_XML += xfixes.xml
+# depends on fixes
+EXTENSION_XML += composite.xml
+
+
+.PHONY: generated-code
+BUILT_SOURCES=generated-code
+#BUILT_SOURCES=gx-connection-gen.c
+#gx-connection-gen.c: $(top_builddir)/tools/gx-gen
+generated-code: $(EXTENSION_XML)
+	$(top_builddir)/tools/gx-gen $(EXTENSION_XML)
+#	$(top_srcdir)/tools/post_process.sh
 
 #libgx_@GX_MAJOR_VERSION@_@GX_MINOR_VERSION@_la_SOURCES = \
 #gx-connection.c gx-drawable.c gx-pixmap.c gx-window.c
@@ -39,4 +51,8 @@ libgx_@GX_MAJOR_VERSION@_@GX_MINOR_VERSION@_la_CPPFLAGS = \
 #CLEANFILES =
 
 #DISTCLEANFILES =
+
+
+$(EXTENSION_XML):
+	$(LN_S) -f $(XCBPROTO_XCBINCLUDEDIR)/$@ $@
 

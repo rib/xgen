@@ -49,7 +49,7 @@ enum {
 struct _GXScreenPrivate
 {
   GXWindow *root;
-  GXColorMap default_colormap;
+  GXColormap default_colormap;
   guint32 white_pixel;
   guint32 black_pixel;
   guint32 current_input_masks;
