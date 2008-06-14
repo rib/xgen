@@ -1,12 +1,31 @@
 lib_LTLIBRARIES = libgx-@GX_MAJOR_VERSION@.@GX_MINOR_VERSION@.la
 
 EXTENSION_XML = xproto.xml
-EXTENSION_XML += shape.xml
-EXTENSION_XML += render.xml
-# depends on shape + render
-EXTENSION_XML += xfixes.xml
-# depends on fixes
-EXTENSION_XML += composite.xml
+# FIXME
+#EXTENSION_XML += bigreq.xml
+#EXTENSION_XML += shape.xml
+#EXTENSION_XML += render.xml
+## depends on shape + render
+#EXTENSION_XML += xfixes.xml
+## depends on fixes
+#EXTENSION_XML += composite.xml
+#EXTENSION_XML += damage.xml
+#EXTENSION_XML += dpms.xml
+##EXTENSION_XML += glx.xml
+##EXTENSION_XML += randr.xml
+#EXTENSION_XML += record.xml
+#EXTENSION_XML += res.xml
+##EXTENSION_XML += screensaver.xml
+#EXTENSION_XML += shm.xml
+##EXTENSION_XML += sync.xml
+#EXTENSION_XML += xc_misc.xml
+#EXTENSION_XML += xevie.xml
+#EXTENSION_XML += xf86dri.xml
+#EXTENSION_XML += xinerama.xml
+##EXTENSION_XML += xprint.xml
+##EXTENSION_XML += xtest.xml
+##EXTENSION_XML += xvmc.xml
+##EXTENSION_XML += xv.xml
 
 
 .PHONY: generated-code
@@ -20,6 +39,7 @@ generated-code: $(EXTENSION_XML)
 #libgx_@GX_MAJOR_VERSION@_@GX_MINOR_VERSION@_la_SOURCES = \
 #gx-connection.c gx-drawable.c gx-pixmap.c gx-window.c
 libgx_@GX_MAJOR_VERSION@_@GX_MINOR_VERSION@_la_SOURCES = \
+	gx-mask-value-item.c \
 	gx-connection.c \
 	gx-connection.h \
 	gx-drawable.c \

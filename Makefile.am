@@ -1,6 +1,11 @@
 SUBDIRS = tools src tests
 #SUBDIRS += doc
 
+pcfiles = gx-@GX_MAJOR_VERSION@.@GX_MINOR_VERSION@.pc
+
+pkgconfig_DATA = $(pcfiles)
+pkgconfigdir   = $(libdir)/pkgconfig
+
 
 #SUBDIRS += po
 

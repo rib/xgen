@@ -28,6 +28,7 @@
 #include "gx-cookie.h"
 #include "gx-gcontext.h"
 #include "gx-types.h"
+#include "gx-mask-value-item.h"
 
 #include <glib.h>
 #include <glib-object.h>
@@ -81,6 +82,7 @@ struct _GXConnectionClass
 
   /* add signals here */
   void (* event) (GXConnection *object, GXGenericEvent *event);
+  void (* reply) (GXConnection *object, GXGenericEvent *event);
 };
 
 GType gx_connection_get_type(void);
@@ -96,6 +98,8 @@ gx_connection_get_root_window (GXConnection *connection);
 
 void
 gx_connection_flush (GXConnection *connection, gboolean flush_server);
+
+void gx_main(void);
 
 /* TODO - split this into seperate files */
 #include "gx-connection-gen.h"

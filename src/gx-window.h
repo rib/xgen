@@ -81,7 +81,8 @@ gx_window_new (GXConnection *connection,
 	       guint16 x,
 	       guint16 y,
 	       guint16 width,
-	       guint16 height);
+	       guint16 height,
+	       guint32 event_mask);
 
 xcb_window_t gx_window_get_xcb_window (GXWindow * self);
 

@@ -25,6 +25,7 @@
 #include "gx-drawable.h"
 #include "gx-window.h"
 #include "gx-types.h"
+#include "gx-mask-value-item.h"
 
 #include <glib.h>
 
@@ -34,12 +35,11 @@
 #include <string.h>
 
 /* Macros and defines */
-#define GX_CONNECTION_GET_PRIVATE(object)(G_TYPE_INSTANCE_GET_PRIVATE ((object), GX_TYPE_CONNECTION, GXConnectionPrivate))
+#define GX_CONNECTION_GET_PRIVATE(object) (G_TYPE_INSTANCE_GET_PRIVATE ((object), GX_TYPE_CONNECTION, GXConnectionPrivate))
 
-/* Enums/Typedefs */
-/* add your signals here */
 enum {
     EVENT_SIGNAL,
+    REPLY_SIGNAL,
     LAST_SIGNAL
 };
 
@@ -56,166 +56,101 @@ struct _GXConnectionPrivate
   xcb_screen_t	    *screen;
   GXWindow	    *root;
 
+  guint		     xcb_source_id;
+
   /* NB: This mechanism wouldn't be needed if only xcb had
    * a way to poll for replies without needing to pass a
    * sequence number. */
   GQueue	    *pending_reply_sequences;
+
+  gboolean	     has_error;
 };
+
+typedef struct
+{
+  GSource	       source;
+  GPollFD	       xcb_poll_fd;
+  GXConnection	      *connection;
+  xcb_generic_event_t *event;
+  void		      *reply;
+  xcb_generic_error_t *error;
+}GXXCBFDSource;
 
 
 /* Function definitions */
-static void gx_connection_class_init(GXConnectionClass *klass);
-static void gx_connection_get_property(GObject *object,
-				       guint id,
-				       GValue *value,
-				       GParamSpec *pspec);
-static void gx_connection_set_property(GObject *object,
-				       guint property_id,
-				       const GValue *value,
-				       GParamSpec *pspec);
-//static void gx_connection_mydoable_interface_init(gpointer interface,
-//                                             gpointer data);
-static void gx_connection_init(GXConnection *self);
-static gboolean connect_to_display (GXConnection *self, const char *display);
-static void gx_connection_finalize(GObject *self);
+static void gx_connection_get_property (GObject *object,
+					guint id,
+					GValue *value,
+					GParamSpec *pspec);
+static void gx_connection_set_property (GObject *object,
+					guint property_id,
+					const GValue *value,
+					GParamSpec *pspec);
+/*
+static void gx_connection_mydoable_interface_init (gpointer interface,
+						   gpointer data);
+*/
+static void connect_to_display (GXConnection *self, const char *display);
+static void gx_connection_finalize (GObject *self);
 
 
 /* Variables */
 static GObjectClass *parent_class = NULL;
 static guint gx_connection_signals[LAST_SIGNAL] = { 0 };
 
-GType
-gx_connection_get_type(void) /* Typechecking */
-{
-  static GType self_type = 0;
 
-  if (!self_type)
-    {
-      static const GTypeInfo object_info =
-	{
-	  sizeof(GXConnectionClass), /* class structure size */
-	  NULL, /* base class initializer */
-	  NULL, /* base class finalizer */
-	  (GClassInitFunc)gx_connection_class_init, /* class initializer */
-	  NULL, /* class finalizer */
-	  NULL, /* class data */
-	  sizeof(GXConnection), /* instance structure size */
-	  0, /* preallocated instances */
-	  (GInstanceInitFunc)gx_connection_init, /* instance initializer */
-	  NULL /* function table */
-	};
+G_DEFINE_TYPE (GXConnection, gx_connection, G_TYPE_OBJECT);
 
-      /* add the type of your parent class here */
-      self_type = g_type_register_static(G_TYPE_OBJECT, /* parent GType */
-					 "GXConnection", /* type name */
-					 &object_info, /* type info */
-					 0 /* flags */
-      );
-#if 0
-      /* add interfaces here */
-      static const GInterfaceInfo mydoable_info =
-	{
-	  (GInterfaceInitFunc)
-	    gx_connection_mydoable_interface_init,
-	  (GInterfaceFinalizeFunc)NULL,
-	  NULL /* interface data */
-	};
-
-      if(self_type != G_TYPE_INVALID) {
-	  g_type_add_interface_static(self_type,
-				      MY_TYPE_MYDOABLE,
-				      &mydoable_info);
-      }
-#endif
-    }
-
-  return self_type;
-}
 
 static void
-gx_connection_class_init(GXConnectionClass *klass) /* Class Initialization */
+gx_connection_class_init (GXConnectionClass *klass)
 {
-  GObjectClass *gobject_class = G_OBJECT_CLASS(klass);
+  GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GParamSpec *new_param;
 
-  parent_class = g_type_class_peek_parent(klass);
+  parent_class = g_type_class_peek_parent (klass);
 
   gobject_class->finalize = gx_connection_finalize;
 
   gobject_class->get_property = gx_connection_get_property;
   gobject_class->set_property = gx_connection_set_property;
 
-  /* set up properties */
   new_param = g_param_spec_string("display", /* name */
 				  "Display", /* nick name */
 				  "X Server Display", /* description */
-				   NULL, /* default */
-                                   G_PARAM_READABLE
-                                   | G_PARAM_WRITABLE
-				   | G_PARAM_CONSTRUCT_ONLY
-				   );
-  g_object_class_install_property(gobject_class,
-				  PROP_DISPLAY,
-				  new_param);
+				  NULL, /* default */
+				  G_PARAM_READABLE
+				  | G_PARAM_WRITABLE
+				  | G_PARAM_CONSTRUCT_ONLY
+  );
+  g_object_class_install_property (gobject_class,
+				   PROP_DISPLAY,
+				   new_param);
 
-#if 0
-  //new_param = g_param_spec_int("name", /* name */
-  //new_param = g_param_spec_uint("name", /* name */
-  //new_param = g_param_spec_boolean("name", /* name */
-  //new_param = g_param_spec_object("name", /* name */
-  new_param = g_param_spec_pointer("name", /* name */
-				   "Name", /* nick name */
-				   "Name", /* description */
-#if INT/UINT/CHAR/LONG/FLOAT...
-				   10, /* minimum */
-				   100, /* maximum */
-				   0, /* default */
-#elif BOOLEAN
-				   FALSE, /* default */
-#elif STRING
-				   NULL, /* default */
-#elif OBJECT
-				   MY_TYPE_PARAM_OBJ, /* GType */
-#elif POINTER
-				   /* nothing extra */
-#endif
-				   MY_PARAM_READABLE /* flags */
-				   MY_PARAM_WRITEABLE /* flags */
-				   MY_PARAM_READWRITE /* flags */
-				   | G_PARAM_CONSTRUCT
-				   | G_PARAM_CONSTRUCT_ONLY
-				   );
-  g_object_class_install_property(gobject_class,
-				  PROP_NAME,
-				  new_param);
-#endif
-
-  /* set up signals */
-#if 0 /* template code */
-  klass->signal_member = signal_default_handler;
-  gx_connection_signals[SIGNAL_NAME] =
-    g_signal_new("signal_name", /* name */
-		 G_TYPE_FROM_CLASS(klass), /* interface GType */
-		 G_SIGNAL_RUN_LAST, /* signal flags */
-		 G_STRUCT_OFFSET(GXConnectionClass, signal_member),
-		 NULL, /* accumulator */
-		 NULL, /* accumulator data */
-		 g_cclosure_marshal_VOID__VOID, /* c marshaller */
-		 G_TYPE_NONE, /* return type */
-		 0 /* number of parameters */
-		 /* vararg, list of param types */
-    );
-#endif
   klass->event = NULL;
   gx_connection_signals[EVENT_SIGNAL] =
-    g_signal_new ("event",	/* name */
-		  G_TYPE_FROM_CLASS (klass),	/* interface GType */
-		  G_SIGNAL_RUN_LAST,	/* signal flags */
-		  G_STRUCT_OFFSET (GXConnectionClass, event), NULL,	/* accumulator */
+    g_signal_new ("event", /* name */
+		  G_TYPE_FROM_CLASS (klass), /* interface GType */
+		  G_SIGNAL_RUN_LAST, /* signal flags */
+		  G_STRUCT_OFFSET (GXConnectionClass, event),
+		  NULL, /* accumulator */
 		  NULL,	/* accumulator data */
-		  g_cclosure_marshal_VOID__VOID,	/* c marshaller */
+		  g_cclosure_marshal_VOID__VOID, /* c marshaller */
 		  G_TYPE_NONE,	/* return type */
-		  0	/* number of parameters */
+		  0 /* number of parameters */
+		  /* vararg, list of param types */
+    );
+  klass->reply = NULL;
+  gx_connection_signals[REPLY_SIGNAL] =
+    g_signal_new ("reply", /* name */
+		  G_TYPE_FROM_CLASS (klass), /* interface GType */
+		  G_SIGNAL_RUN_LAST, /* signal flags */
+		  G_STRUCT_OFFSET (GXConnectionClass, event),
+		  NULL, /* accumulator */
+		  NULL,	/* accumulator data */
+		  g_cclosure_marshal_VOID__VOID, /* c marshaller */
+		  G_TYPE_NONE,	/* return type */
+		  0 /* number of parameters */
 		  /* vararg, list of param types */
     );
 
@@ -234,12 +169,6 @@ gx_connection_get_property(GObject *object,
 #if 0 /* template code */
     case PROP_NAME:
       g_value_set_int(value, self->priv->property);
-      g_value_set_uint(value, self->priv->property);
-      g_value_set_boolean(value, self->priv->property);
-      /* don't forget that this will dup the string for you: */
-      g_value_set_string(value, self->priv->property);
-      g_value_set_object(value, self->priv->property);
-      g_value_set_pointer(value, self->priv->property);
       break;
 #endif
     default:
@@ -261,11 +190,6 @@ gx_connection_set_property(GObject *object,
 #if 0 /* template code */
     case PROP_NAME:
       gx_connection_set_property(self, g_value_get_int(value));
-      gx_connection_set_property(self, g_value_get_uint(value));
-      gx_connection_set_property(self, g_value_get_boolean(value));
-      gx_connection_set_property(self, g_value_get_string(value));
-      gx_connection_set_property(self, g_value_get_object(value));
-      gx_connection_set_property(self, g_value_get_pointer(value));
       break;
 #endif
     case PROP_DISPLAY:
@@ -279,22 +203,6 @@ gx_connection_set_property(GObject *object,
     }
 }
 
-/* Initialize interfaces here */
-
-#if 0
-static void
-gx_connection_mydoable_interface_init(gpointer interface,
-				      gpointer data)
-{
-  MyDoableIface *mydoable = interface;
-  g_assert(G_TYPE_FROM_INTERFACE(mydoable) == MY_TYPE_MYDOABLE);
-
-  mydoable->method1 = gx_connection_method1;
-  mydoable->method2 = gx_connection_method2;
-}
-#endif
-
-/* Instance Construction */
 static void
 gx_connection_init (GXConnection *self)
 {
@@ -304,18 +212,16 @@ gx_connection_init (GXConnection *self)
   self->priv->pending_reply_sequences = g_queue_new ();
 }
 
-/* Instantiation wrapper */
 GXConnection *
 gx_connection_new (const char *display)
 {
   GXConnection *self =
     GX_CONNECTION (g_object_new (gx_connection_get_type (),
-                   "display", display, NULL));
+				 "display", display, NULL));
 
   return self;
 }
 
-/* Instance Destruction */
 void
 gx_connection_finalize (GObject *object)
 {
@@ -326,76 +232,10 @@ gx_connection_finalize (GObject *object)
   G_OBJECT_CLASS (parent_class)->finalize (object);
 }
 
-
-/* add new methods here */
-
-/**
- * function_name:
- * @par1:  description of parameter 1. These can extend over more than
- * one line.
- * @par2:  description of parameter 2
- *
- * The function description goes here.
- *
- * Returns: an integer.
- */
-#if 0
-For more gtk-doc notes, see:
-http://developer.gnome.org/arch/doc/authors.html
-#endif
-
-
-#if 0 // getter/setter templates
-/**
- * gx_connection_get_PROPERTY:
- * @self:  A GXConnection.
- *
- * Fetches the PROPERTY of the GXConnection. FIXME, add more info!
- *
- * Returns: The value of PROPERTY. FIXME, add more info!
- */
-PropType
-gx_connection_get_PROPERTY(GXConnection *self)
-{
-  g_return_val_if_fail(GX_IS_CONNECTION(self), /* FIXME */);
-
-  //return self->priv->PROPERTY;
-  //return g_strdup(self->priv->PROPERTY);
-  //return g_object_ref(self->priv->PROPERTY);
-}
-
-/**
- * gx_connection_set_PROPERTY:
- * @self:  A GXConnection.
- * @property:  The value to set. FIXME, add more info!
- *
- * Sets this properties value.
- *
- * This will also clear the properties previous value.
- */
-void
-gx_connection_set_PROPERTY(GXConnection *self, PropType PROPERTY)
-{
-  g_return_if_fail(GX_IS_CONNECTION(self));
-
-  //if(self->priv->PROPERTY == PROPERTY)
-  //if(self->priv->PROPERTY == NULL
-  //   || strcmp(self->priv->PROPERTY, PROPERTY) != 0)
-    {
-      //    self->priv->PROPERTY = PROPERTY;
-      //    g_free(self->priv->PROPERTY);
-      //    self->priv->PROPERTY = g_strdup(PROPERTY);
-      //    g_object_unref(self->priv->PROPERTY);
-      //    self->priv->PROPERTY = g_object_ref(PROPERTY);
-      //    g_object_notify(G_OBJECT(self), "PROPERTY");
-    }
-}
-#endif
-
 xcb_connection_t *
 gx_connection_get_xcb_connection (GXConnection *self)
 {
-    return self->priv->xcb_connection;
+  return self->priv->xcb_connection;
 }
 
 static xcb_screen_t *
@@ -427,31 +267,17 @@ check_for_any_reply_or_error (GXConnection *connection,
   for (tmp = connection->priv->pending_reply_sequences->head;
        tmp != NULL;
        tmp = tmp->next)
-  {
-    unsigned int request = GPOINTER_TO_INT (tmp->data);
-    xcb_poll_for_reply (xcb_connection, request, reply, error);
-    if (reply || error)
-      g_queue_remove (connection->priv->pending_reply_sequences, tmp->data);
-  }
+    {
+      unsigned int request = GPOINTER_TO_INT (tmp->data);
+      xcb_poll_for_reply (xcb_connection, request, reply, error);
+      if (reply || error)
+	g_queue_remove (connection->priv->pending_reply_sequences, tmp->data);
+    }
 }
-
-typedef struct
-{
-  GSource	       source;
-
-  GPollFD	       xcb_poll_fd;
-
-  GXConnection	      *connection;
-
-  xcb_generic_event_t *event;
-  void		      *reply;
-  xcb_generic_error_t *error;
-
-}GXXCBFDSource;
 
 static gboolean
 xcb_event_prepare (GSource *source,
-                   gint    *timeout)
+		   gint    *timeout)
 {
   GXXCBFDSource *xcb_source = (GXXCBFDSource *)source;
   xcb_connection_t *xcb_connection =
@@ -530,7 +356,6 @@ xcb_event_dispatch (GSource *source, GSourceFunc callback, gpointer data)
   void		      *reply;
   xcb_generic_error_t *error;
 
-
   xcb_source->event = NULL;
   event = xcb_source->event;
 
@@ -544,26 +369,27 @@ xcb_event_dispatch (GSource *source, GSourceFunc callback, gpointer data)
     {
       if (event)
 	signal_event (xcb_source->connection, event);
+
       event = xcb_poll_for_event (xcb_connection);
 
       if (reply)
 	signal_reply (xcb_source->connection, reply);
       else if (error)
 	signal_error (xcb_source->connection, error);
+
       check_for_any_reply_or_error (xcb_source->connection,
 				    &reply,
 				    &error);
-
     } while (event || reply || error);
 
   return TRUE;
 }
 
 static GSourceFuncs xcb_source_funcs = {
-  .prepare = xcb_event_prepare,
-  .check = xcb_event_check,
-  .dispatch = xcb_event_dispatch,
-  .finalize = NULL,
+    .prepare = xcb_event_prepare,
+    .check = xcb_event_check,
+    .dispatch = xcb_event_dispatch,
+    .finalize = NULL,
 };
 
 static void
@@ -588,34 +414,41 @@ add_xcb_event_source(GXConnection *self)
 
   g_source_add_poll (source, &xcb_source->xcb_poll_fd);
   g_source_set_can_recurse (source, TRUE);
-  g_source_attach (source, NULL);
+  self->priv->xcb_source_id = g_source_attach (source, NULL);
 }
 
-static gboolean
+static void
 connect_to_display (GXConnection *self, const char *display)
 {
   if (!display)
     display = getenv("DISPLAY");
 
-  g_print("DISPLAY=%s\n", display);
-
   self->priv->xcb_connection =
     xcb_connect (display, &self->priv->screen_num);
 
-  self->priv->screen =
-    screen_of_connection (self->priv->xcb_connection,
-			  self->priv->screen_num);
+  if (xcb_connection_has_error (self->priv->xcb_connection))
+    {
+      self->priv->has_error = TRUE;
+    }
+  else
+    {
+      self->priv->has_error = FALSE;
 
-  self->priv->root =
-    GX_WINDOW (g_object_new (GX_TYPE_WINDOW,
-			     "connection", self,
-			     "xid", self->priv->screen->root,
-			     "wrap", TRUE,
-			     NULL));
+      self->priv->screen =
+	screen_of_connection (self->priv->xcb_connection,
+			      self->priv->screen_num);
 
-  add_xcb_event_source (self);
+      /* The "xid" + "wrap" properties can be used to create GXWindow
+       * objects that wrap and existing window XID */
+      self->priv->root =
+	GX_WINDOW (g_object_new (GX_TYPE_WINDOW,
+				 "connection", self,
+				 "xid", self->priv->screen->root,
+				 "wrap", TRUE,
+				 NULL));
 
-  return TRUE;
+      add_xcb_event_source (self);
+    }
 }
 
 GXWindow *
@@ -627,16 +460,38 @@ gx_connection_get_root_window (GXConnection *connection)
 void
 gx_connection_flush (GXConnection *connection, gboolean flush_server)
 {
-  //if (flush_server)
-  //  xcb_aux_flush (connection->priv->xcb_connection);
-  //else
-    xcb_flush(connection->priv->xcb_connection);
+  /*
+     if (flush_server)
+     xcb_aux_flush (connection->priv->xcb_connection);
+     else
+     */
+  xcb_flush(connection->priv->xcb_connection);
 }
 
 void
-gx_main(void)
+gx_main (void)
 {
+  GMainLoop *loop;
 
+#if 0
+  if (!gx_is_initialized)
+    {
+      g_warning ("Called gx_main() but GX wasn't initialised.  "
+		 "You must call gx_init() first.");
+      return;
+    }
+#endif
+
+  loop = g_main_loop_new (NULL, TRUE);
+
+  g_main_loop_run (loop);
+
+}
+
+gboolean
+gx_connection_has_error (GXConnection *self)
+{
+  return self->priv->has_error;
 }
 
 #include "gx-connection-gen.c"

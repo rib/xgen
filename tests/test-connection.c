@@ -1,5 +1,5 @@
 
-#include "gx.h"
+#include <gx.h>
 
 #include <stdio.h>
 #include <unistd.h>
@@ -10,51 +10,61 @@ main(int argc, char **argv)
   GXConnection *connection;
   GXWindow *root;
   GXWindow *window;
-  GXQueryTreeReply *query_tree;
-  GArray *array;
-  GXWindow **children;
-  GXWindow *child;
-  int i;
 
   g_type_init();
 
-  connection = gx_connection_new(NULL);
-  if (!connection)
+  connection = gx_connection_new (NULL);
+
+  /* I don't think it's standard practice to allow gobject initialisation
+   * to fail by returning a NULL pointer, which I think I would have
+   * otherwise prefered as my the mechanism for detecting error.
+   *
+   * Instead we copy the XCB approach.
+   */
+  if (gx_connection_has_error (connection))
     {
-      printf("Moo\n");
+      g_printerr ("Error establishing connection to X server");
       return 1;
     }
+
   root = gx_connection_get_root_window (connection);
 
-  window = gx_window_new(connection,
-			 root,
-			 0,
-			 0,
-			 300,
-			 300);
+  /* Note window creation via the gx_window_new function has a very
+   * simplified interface, that can hopefully be used 99% of the
+   * time.
+   *
+   * If for example you need to set the window border you can either
+   * use gx_window_change_window_attributes(), or to gain access to
+   * _all_ create window parameters you can use:
+   *
+   *  g_object_new (GX_TYPE_WINDOW,...)
+   *		    "connection", connection,
+   *		    "parent", parent,
+   *		    ...,
+   *		    NULL);
+   *
+   * which has a full range of construct only properties
+   */
+  window = gx_window_new (connection,
+			  root, /* parent */
+			  0, /* x */
+			  0, /* y */
+			  300, /* width */
+			  300, /* height */
+			  0 /* event mask */
+			  );
 
   gx_window_map_window (window);
 
-  query_tree = gx_window_query_tree (root);
-
-  array = gx_window_query_tree_get_children (query_tree);
-  children = (GXWindow **)array->data;
-  for (i = 0; i < array->len; i++)
-    {
-      child = children[i];
-      g_print ("child\n");
-    }
-  gx_window_query_tree_free_children (array);
-
-  gx_window_query_tree_reply_free (query_tree);
-
   gx_connection_flush (connection, FALSE);
 
-  sleep (10);
+  g_print ("Hello World\n");
+  g_print ("Sleeping for 5 seconds...\n");
+  sleep (5);
 
   g_object_unref (root);
   g_object_unref (connection);
-  printf("Hello World\n");
+
   return 0;
 }
 

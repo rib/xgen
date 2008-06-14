@@ -31,8 +31,6 @@
 /* Macros and defines */
 #define GX_GCONTEXT_GET_PRIVATE(object)(G_TYPE_INSTANCE_GET_PRIVATE ((object), GX_TYPE_GCONTEXT, GXGContextPrivate))
 
-/* Enums/Typedefs */
-/* add your signals here */
 #if 0
 enum {
     SIGNAL_NAME,
@@ -52,9 +50,6 @@ struct _GXGContextPrivate
     xcb_gcontext_t  xcb_gcontext;
 };
 
-
-/* Function definitions */
-static void gx_gcontext_class_init(GXGContextClass *klass);
 static void gx_gcontext_get_property(GObject *object,
 				   guint id,
 				   GValue *value,
@@ -69,57 +64,11 @@ static void gx_gcontext_init(GXGContext *self);
 static void gx_gcontext_finalize(GObject *self);
 
 
-/* Variables */
 static GObjectClass *parent_class = NULL;
 /* static guint gx_gcontext_signals[LAST_SIGNAL] = { 0 }; */
 
-GType
-gx_gcontext_get_type(void) /* Typechecking */
-{
-  static GType self_type = 0;
+G_DEFINE_TYPE(GXGContext, gx_gcontext, G_TYPE_OBJECT);
 
-  if (!self_type)
-    {
-      static const GTypeInfo object_info =
-	{
-	  sizeof(GXGContextClass), /* class structure size */
-	  NULL, /* base class initializer */
-	  NULL, /* base class finalizer */
-	  (GClassInitFunc)gx_gcontext_class_init, /* class initializer */
-	  NULL, /* class finalizer */
-	  NULL, /* class data */
-	  sizeof(GXGContext), /* instance structure size */
-	  0, /* preallocated instances */
-	  (GInstanceInitFunc)gx_gcontext_init, /* instance initializer */
-	  NULL /* function table */
-	};
-
-      /* add the type of your parent class here */
-      self_type = g_type_register_static(G_TYPE_OBJECT, /* parent GType */
-					 "GXGContext", /* type name */
-					 &object_info, /* type info */
-					 0 /* flags */
-      );
-#if 0
-      /* add interfaces here */
-      static const GInterfaceInfo mydoable_info =
-	{
-	  (GInterfaceInitFunc)
-	    gx_gcontext_mydoable_interface_init,
-	  (GInterfaceFinalizeFunc)NULL,
-	  NULL /* interface data */
-	};
-
-      if(self_type != G_TYPE_INVALID) {
-	  g_type_add_interface_static(self_type,
-				      MY_TYPE_MYDOABLE,
-				      &mydoable_info);
-      }
-#endif
-    }
-
-  return self_type;
-}
 
 static void
 gx_gcontext_class_init(GXGContextClass *klass) /* Class Initialization */
@@ -200,12 +149,6 @@ gx_gcontext_get_property(GObject *object,
 #if 0 /* template code */
     case PROP_NAME:
       g_value_set_int(value, self->priv->property);
-      g_value_set_uint(value, self->priv->property);
-      g_value_set_boolean(value, self->priv->property);
-      /* don't forget that this will dup the string for you: */
-      g_value_set_string(value, self->priv->property);
-      g_value_set_object(value, self->priv->property);
-      g_value_set_pointer(value, self->priv->property);
       break;
 #endif
     default:
@@ -227,11 +170,6 @@ gx_gcontext_set_property(GObject *object,
 #if 0 /* template code */
     case PROP_NAME:
       gx_gcontext_set_property(self, g_value_get_int(value));
-      gx_gcontext_set_property(self, g_value_get_uint(value));
-      gx_gcontext_set_property(self, g_value_get_boolean(value));
-      gx_gcontext_set_property(self, g_value_get_string(value));
-      gx_gcontext_set_property(self, g_value_get_object(value));
-      gx_gcontext_set_property(self, g_value_get_pointer(value));
       break;
 #endif
     default:
@@ -240,9 +178,7 @@ gx_gcontext_set_property(GObject *object,
     }
 }
 
-/* Initialize interfaces here */
-
-#if 0
+#if 0 /* template code */
 static void
 gx_gcontext_mydoable_interface_init(gpointer interface,
 				  gpointer data)
@@ -279,73 +215,6 @@ gx_gcontext_finalize(GObject *object)
   /* destruct your object here */
   G_OBJECT_CLASS(parent_class)->finalize(object);
 }
-
-
-
-/* add new methods here */
-
-/**
- * function_name:
- * @par1:  description of parameter 1. These can extend over more than
- * one line.
- * @par2:  description of parameter 2
- *
- * The function description goes here.
- *
- * Returns: an integer.
- */
-#if 0
-For more gtk-doc notes, see:
-http://developer.gnome.org/arch/doc/authors.html
-#endif
-
-
-#if 0 /* getter/setter templates */
-/**
- * gx_gcontext_get_PROPERTY:
- * @self:  A GXGContext.
- *
- * Fetches the PROPERTY of the GXGContext. FIXME, add more info!
- *
- * Returns: The value of PROPERTY. FIXME, add more info!
- */
-PropType
-gx_gcontext_get_PROPERTY(GXGContext *self)
-{
-  g_return_val_if_fail(GX_IS_GCONTEXT(self), /* FIXME */);
-
-  return self->priv->PROPERTY;
-  return g_strdup(self->priv->PROPERTY);
-  return g_object_ref(self->priv->PROPERTY);
-}
-
-/**
- * gx_gcontext_set_PROPERTY:
- * @self:  A GXGContext.
- * @property:  The value to set. FIXME, add more info!
- *
- * Sets this properties value.
- *
- * This will also clear the properties previous value.
- */
-void
-gx_gcontext_set_PROPERTY(GXGContext *self, PropType PROPERTY)
-{
-  g_return_if_fail(GX_IS_GCONTEXT(self));
-
-  if(self->priv->PROPERTY == PROPERTY)
-    if(self->priv->PROPERTY == NULL
-       || strcmp(self->priv->PROPERTY, PROPERTY) != 0)
-      {
-	self->priv->PROPERTY = PROPERTY;
-	g_free(self->priv->PROPERTY);
-	self->priv->PROPERTY = g_strdup(PROPERTY);
-	g_object_unref(self->priv->PROPERTY);
-	self->priv->PROPERTY = g_object_ref(PROPERTY);
-	g_object_notify(G_OBJECT(self), "PROPERTY");
-      }
-}
-#endif
 
 xcb_gcontext_t
 gx_gcontext_get_xcb_gcontext (GXGContext *self)

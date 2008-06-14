@@ -81,6 +81,8 @@ typedef enum
   GXGEN_SIGNED,
   GXGEN_UNSIGNED,
   GXGEN_XID,
+  GXGEN_FLOAT,
+  GXGEN_DOUBLE,
   GXGEN_STRUCT,
   GXGEN_UNION,
   GXGEN_ENUM,
@@ -238,6 +240,14 @@ static const GXGenDefinition core_type_definitions[] = {
     .type = GXGEN_CHAR,
     .size = 1},
   {
+    .name = "float",
+    .type = GXGEN_FLOAT,
+    .size = 4},
+  {
+    .name = "double",
+    .type = GXGEN_DOUBLE,
+    .size = 8},
+  {
     .name = "BOOL",
     .type = GXGEN_BOOLEAN,
     .size = 1},
@@ -280,6 +290,8 @@ struct type_mapping
 static struct type_mapping core_type_mappings[] = {
   {"void", "void"},
   {"char", "gchar"},
+  {"float", "gfloat"},
+  {"double", "gdouble"},
   {"BOOL", "guint8"},
   {"BYTE", "guint8"},
   {"CARD8", "guint8"},
@@ -310,6 +322,7 @@ static struct camelcase_mapping camelcase_dictionary[] = {
   {"RECTANGLE","Rectangle"},
   {"TIMESTAMP","Timestamp"},
   {"COLORMAP","Colormap"},
+  {"COLORITEM","Coloritem"},
   {"FONTABLE","Fontable"},
   /* {"GLYPHSET","GlyphSet"}, */
   {"CONTEXT","Context"},
@@ -329,6 +342,7 @@ static struct camelcase_mapping camelcase_dictionary[] = {
   {"CHAR","Char"},
   {"CODE","Code"},
   {"FONT","Font"},
+  {"HOST","Host"},
   {"KIND","Kind"},
   {"INFO","Info"},
   {"PICT","Pict"},
@@ -428,6 +442,12 @@ gxgen_find_type (GXGenState * state, char *name)
 	    return def;
 	}
     }
+#if 0
+  for (i = 0; core_type_mappings[i].from != NULL; i++)
+    {
+
+    }
+#endif
 
   /* If an extension was explicitly specified we have no where
    * else to look */
@@ -922,6 +942,8 @@ gxgen_parse_xmlxcb_file (GXGenState * state, char *filename)
 	{
 	}
     }
+
+  extension->definitions = g_list_reverse (extension->definitions);
 }
 
 static long
@@ -1146,7 +1168,7 @@ output_typedefs (GXGenState * state,
   char *typedef_type_cc;
   char *typedef_name_cc;
 
-  for (tmp = state->definitions; tmp != NULL; tmp = tmp->next)
+  for (tmp = extension->definitions; tmp != NULL; tmp = tmp->next)
     {
       GXGenDefinition *def = tmp->data;
 
@@ -1182,7 +1204,7 @@ output_typedefs (GXGenState * state,
     }
   out (parts, GXGEN_PART_CONNECTION_OBJ_H_TYPEDEFS, "\n");
 
-  for (tmp = state->definitions; tmp != NULL; tmp = tmp->next)
+  for (tmp = extension->definitions; tmp != NULL; tmp = tmp->next)
     {
       GXGenDefinition *def = tmp->data;
 
@@ -1210,7 +1232,7 @@ output_structs_and_unions (GXGenState * state,
 {
   GList *tmp;
 
-  for (tmp = state->definitions; tmp != NULL; tmp = tmp->next)
+  for (tmp = extension->definitions; tmp != NULL; tmp = tmp->next)
     {
       GXGenDefinition *def = tmp->data;
       guint pad = 0;
@@ -1263,7 +1285,7 @@ output_enums (GXGenState * state,
 {
   GList *tmp;
 
-  for (tmp = state->definitions; tmp != NULL; tmp = tmp->next)
+  for (tmp = extension->definitions; tmp != NULL; tmp = tmp->next)
     {
       GXGenDefinition *def = tmp->data;
       GList *tmp2;
@@ -1665,7 +1687,9 @@ output_reply_free (GXGenState * state,
 }
 
 static void
-output_requests (GXGenState * state, GXGenExtension * extension, GString ** parts)
+output_requests (GXGenState * state,
+		 GXGenExtension * extension,
+		 GString ** parts)
 {
   GList *tmp;
 
@@ -1676,6 +1700,7 @@ output_requests (GXGenState * state, GXGenExtension * extension, GString ** part
       GList *tmp2;
       char *name_lc;
       GString *scratch;
+      gboolean has_mask_value_items = FALSE;
 
       /* Some constructor type requests are special cased as object
        * constructors */
@@ -1734,15 +1759,21 @@ output_requests (GXGenState * state, GXGenExtension * extension, GString ** part
 	  type = gxgen_definition_to_gx_type (field->definition, TRUE);
 
 	  if (field->length)
-	    out (parts, obj->h_protos, ",\n\t\tconst %s *%s", type, field->name);
+	    out (parts, obj->h_protos,
+		 ",\n\t\tconst %s *%s", type, field->name);
 	  else if (field->definition->type == GXGEN_VALUEPARAM)
 	    {
+	      out (parts, obj->h_protos,
+		   ",\n\t\tGXMaskValueItem *mask_value_items");
+	      has_mask_value_items = TRUE;
+#if 0
 	      const char *valueparam_type =
 		gxgen_definition_to_gx_type (field->definition->reference, FALSE);
 	      out (parts, obj->h_protos, ",\n\t\t%s %s", valueparam_type,
 		   field->definition->mask_name);
-	      out (parts, obj->h_protos, ",\n\t\t%s *%s", valueparam_type,
+	      out (parts, obj->h_protos, ",\n\t\tconst guint32 *%s",
 		   field->definition->list_name);
+#endif
 	    }
 	  else
 	    out (parts, obj->h_protos, ",\n\t\t%s %s", type, field->name);
@@ -1800,6 +1831,12 @@ output_requests (GXGenState * state, GXGenExtension * extension, GString ** part
 	    }
 	  else if (field->definition->type == GXGEN_VALUEPARAM)
 	    {
+	      out (parts, obj->h_protos,
+		   ",\n\t\tGXMaskValueItem *mask_value_items");
+	      out (parts, obj->c_funcs,
+		   ",\n\t\tGXMaskValueItem *mask_value_items");
+	      has_mask_value_items = TRUE;
+#if 0
 	      const char *valueparam_type =
 		gxgen_definition_to_gx_type (field->definition->reference, FALSE);
 
@@ -1811,6 +1848,7 @@ output_requests (GXGenState * state, GXGenExtension * extension, GString ** part
 		   field->definition->mask_name);
 	      out (parts, obj->c_funcs, ",\n\t\t%s *%s", valueparam_type,
 		   field->definition->list_name);
+#endif
 	    }
 	  else
 	    {
@@ -1845,6 +1883,27 @@ output_requests (GXGenState * state, GXGenExtension * extension, GString ** part
 	       request->definition->name);
 	}
 
+      /* If the request has a GXGEN_VALUEPARAM field, then we will need
+       * to translate an array of GXMaskValueItems from the user.
+       */
+      if (has_mask_value_items)
+	{
+	  out (parts, obj->c_funcs,
+	       "\tguint32 value_list_len = "
+		  "gx_mask_value_items_get_count (mask_value_items);\n");
+	  out (parts, obj->c_funcs,
+	       "\tguint32 *value_list = "
+		  "alloca (value_list_len * 4);\n");
+	  out (parts, obj->c_funcs,
+		"\tguint32 value_mask;\n");
+	  out (parts, obj->c_funcs,
+		"\n");
+
+	  out (parts, obj->c_funcs,
+	       "\tgx_mask_value_items_get_list (mask_value_items, "
+		  "&value_mask, value_list);\n");
+	}
+
       out (parts, obj->c_funcs, "\n");
 
       if (g_list_length (request->definition->reply_fields) > 1)
@@ -1875,12 +1934,16 @@ output_requests (GXGenState * state, GXGenExtension * extension, GString ** part
 	    }
 	  else
 	    {
+	      out (parts, obj->c_funcs, ",\n\t\t\tvalue_mask");
+	      out (parts, obj->c_funcs, ",\n\t\t\tvalue_list");
+#if 0
 	      //const char *valueparam_type =
 		//gxgen_definition_to_gx_type (field->definition->reference, FALSE);
 	      out (parts, obj->c_funcs, ",\n\t\t\t%s",
 		   field->definition->mask_name);
 	      out (parts, obj->c_funcs, ",\n\t\t\t%s",
 		   field->definition->list_name);
+#endif
 	    }
 	}
       out (parts, obj->c_funcs, ");\n\n");
@@ -1948,7 +2011,9 @@ output_event_typedefs (GXGenState * state,
 }
 
 static void
-gen_code (GXGenState * state, GXGenExtension * extension, GString ** parts)
+output_extension_code (GXGenState * state,
+		       GXGenExtension * extension,
+		       GString ** parts)
 {
   output_typedefs (state, extension, parts);
 
@@ -1962,7 +2027,7 @@ gen_code (GXGenState * state, GXGenExtension * extension, GString ** parts)
 }
 
 static void
-output_gx_code (GXGenState * state, GXGenExtension * extension)
+output_all_gx_code (GXGenState * state)
 {
   FILE *connection_header;
   FILE *connection_code;
@@ -1976,11 +2041,16 @@ output_gx_code (GXGenState * state, GXGenExtension * extension)
   FILE *gcontext_code;
   GString *parts[GXGEN_PART_COUNT];
   int i;
+  GList *tmp;
 
   for (i = 0; i < GXGEN_PART_COUNT; i++)
     parts[i] = g_string_new ("");
 
-  gen_code (state, extension, parts);
+  for (tmp = state->extensions; tmp != NULL; tmp = tmp->next)
+    {
+      GXGenExtension *extension = tmp->data;
+      output_extension_code (state, extension, parts);
+    }
 
   connection_header = fopen ("gx-connection-gen.h", "w");
   if (!connection_header)
@@ -2177,24 +2247,17 @@ int
 main (int argc, char **argv)
 {
   int i;
+  unsigned long l = 1;
   GXGenState *state = g_new0 (GXGenState, 1);
-  GList *tmp;
 
-  {
-    unsigned long l = 1;
-    state->host_is_le = *(unsigned char *) &l;
-  }
+  state->host_is_le = *(unsigned char *) &l;
 
   for (i = 1; i < argc && argv[i]; i++)
     gxgen_parse_xmlxcb_file (state, argv[i]);
 
   state->definitions = g_list_reverse (state->definitions);
 
-  for (tmp = state->extensions; tmp != NULL; tmp = tmp->next)
-    {
-      GXGenExtension *extension = tmp->data;
-      output_gx_code (state, extension);
-    }
+  output_all_gx_code (state);
 
   return 0;
 }

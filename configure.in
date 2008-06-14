@@ -273,7 +273,7 @@ tools/Makefile
 src/Makefile
 tests/Makefile
 dnl po/Makefile.in
-dnl gx-0.1.0.pc
+gx-0.1.pc
 )
 
 dnl Configuration output
