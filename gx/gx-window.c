@@ -24,8 +24,8 @@
  *
  */
 
-#include "gx-window.h"
-#include "gx-connection.h"
+#include <gx/gx-window.h>
+#include <gx/gx-connection.h>
 
 #include <xcb/xcb.h>
 #include <string.h>

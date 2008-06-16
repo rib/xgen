@@ -21,11 +21,11 @@
  *
  */
 
-#include "gx-connection.h"
-#include "gx-drawable.h"
-#include "gx-window.h"
-#include "gx-types.h"
-#include "gx-mask-value-item.h"
+#include <gx/gx-connection.h>
+#include <gx/gx-drawable.h>
+#include <gx/gx-window.h>
+#include <gx/gx-types.h>
+#include <gx/gx-mask-value-item.h>
 
 #include <glib.h>
 

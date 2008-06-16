@@ -1,4 +1,4 @@
-SUBDIRS = tools src tests
+SUBDIRS = tools gx tests
 #SUBDIRS += doc
 
 pcfiles = gx-@GX_MAJOR_VERSION@.@GX_MINOR_VERSION@.pc

@@ -72,6 +72,27 @@ libgx_@GX_MAJOR_VERSION@_@GX_MINOR_VERSION@_la_CPPFLAGS = \
 
 #DISTCLEANFILES =
 
+gxincludedir = \
+	$(includedir)/gx-$(GX_MAJOR_VERSION).$(GX_MINOR_VERSION)
+gxinternalincludedir = \
+	$(includedir)/gx-$(GX_MAJOR_VERSION).$(GX_MINOR_VERSION)/gx
+
+gxinclude_HEADERS = gx.h
+gxinternalinclude_HEADERS = \
+	gx-types.h \
+	gx-mask-value-item.h \
+	gx-connection.h \
+	gx-connection-gen.h \
+	gx-drawable.h \
+	gx-drawable-gen.h \
+	gx-pixmap.h \
+	gx-pixmap-gen.h \
+	gx-window.h \
+	gx-window-gen.h \
+	gx-cookie.h \
+	gx-screen.h \
+	gx-gcontext.h \
+	gx-gcontext-gen.h
 
 $(EXTENSION_XML):
 	$(LN_S) -f $(XCBPROTO_XCBINCLUDEDIR)/$@ $@

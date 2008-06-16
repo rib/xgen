@@ -25,10 +25,10 @@
 #ifndef GX_CONNECTION_H
 #define GX_CONNECTION_H
 
-#include "gx-cookie.h"
-#include "gx-gcontext.h"
-#include "gx-types.h"
-#include "gx-mask-value-item.h"
+#include <gx/gx-cookie.h>
+#include <gx/gx-gcontext.h>
+#include <gx/gx-types.h>
+#include <gx/gx-mask-value-item.h>
 
 #include <glib.h>
 #include <glib-object.h>
@@ -102,7 +102,7 @@ gx_connection_flush (GXConnection *connection, gboolean flush_server);
 void gx_main(void);
 
 /* TODO - split this into seperate files */
-#include "gx-connection-gen.h"
+#include <gx/gx-connection-gen.h>
 
 
 G_END_DECLS

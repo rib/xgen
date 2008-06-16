@@ -26,7 +26,7 @@
 #ifndef GX_PIXMAP_H
 #define GX_PIXMAP_H
 
-#include "gx-drawable.h"
+#include <gx/gx-drawable.h>
 
 #include <glib.h>
 #include <glib-object.h>

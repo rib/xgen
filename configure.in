@@ -46,7 +46,7 @@ m4_define([gx_lt_age], 0)
 m4_define([gx_lt_release], [gx_version])
 
 AC_INIT(gx, [gx_version])
-AC_CONFIG_SRCDIR(src/gx-connection.c)
+AC_CONFIG_SRCDIR(gx/gx-connection.c)
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_HEADERS(config.h)
 AM_INIT_AUTOMAKE([gnu])
@@ -270,7 +270,7 @@ dnl ================================================================
 AC_OUTPUT(
 Makefile
 tools/Makefile
-src/Makefile
+gx/Makefile
 tests/Makefile
 dnl po/Makefile.in
 gx-0.1.pc

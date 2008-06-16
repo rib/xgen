@@ -24,7 +24,7 @@
  *
  */
 
-#include "gx-cookie.h"
+#include <gx/gx-cookie.h>
 
 /* Macros and defines */
 #define GX_COOKIE_GET_PRIVATE(object)(G_TYPE_INSTANCE_GET_PRIVATE ((object), GX_TYPE_COOKIE, GXCookiePrivate))

@@ -27,7 +27,7 @@
 #ifndef GX_WINDOW_H
 #define GX_WINDOW_H
 
-#include "gx-drawable.h"
+#include <gx/gx-drawable.h>
 
 #include <glib-object.h>
 #include <glib.h>
@@ -67,7 +67,7 @@ struct __GXWindowClass
   GXDrawableClass parent_class;
 
   /* add signals here */
-#include "gx-window-signal-callbacks-gen.h"
+/* #include "gx-window-signal-callbacks-gen.h" */
 
   void (* event) (GXConnection *object, GXGenericEvent *event);
 };
@@ -94,7 +94,7 @@ GXWindow *
 _gx_window_find_from_xid (guint32 xid);
 
 /* TODO - split this into seperate files */
-#include "gx-window-gen.h"
+#include <gx/gx-window-gen.h>
 
 G_END_DECLS
 #endif /* GX_WINDOW_H */

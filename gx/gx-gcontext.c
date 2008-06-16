@@ -23,7 +23,7 @@
  *
  */
 
-#include "gx-gcontext.h"
+#include <gx/gx-gcontext.h>
 
 #include <xcb/xcb.h>
 #include <string.h>

@@ -23,12 +23,12 @@
  *
  */
 
-#include "gx-pixmap.h"
+#include <gx/gx-screen.h>
 
-#include <string.h>
+#include <gx/gx-window.h>
 
 /* Macros and defines */
-#define GX_PIXMAP_GET_PRIVATE(object)(G_TYPE_INSTANCE_GET_PRIVATE ((object), GX_TYPE_PIXMAP, GXPixmapPrivate))
+#define GX_SCREEN_GET_PRIVATE(object)(G_TYPE_INSTANCE_GET_PRIVATE ((object), GX_TYPE_SCREEN, GXScreenPrivate))
 
 #if 0
 enum
@@ -46,42 +46,56 @@ enum
 };
 #endif
 
-struct _GXPixmapPrivate
+struct _GXScreenPrivate
 {
-  guint padding0;
+  GXWindow *root;
+  GXColormap default_colormap;
+  guint32 white_pixel;
+  guint32 black_pixel;
+  guint32 current_input_masks;
+  guint16 width_in_pixels;
+  guint16 height_in_pixels;
+  guint16 width_in_millimeters;
+  guint16 height_in_millimeters;
+  guint16 min_installed_maps;
+  guint16 max_installed_maps;
+  GXVisualID root_visual;
+  guint8 backing_stores;
+  gboolean save_unders;
+  guint8 root_depth;
+  guint8 allowed_depths_len;
 };
 
 
-static void gx_pixmap_get_property (GObject * object,
+static void gx_screen_get_property (GObject * object,
 				    guint id,
 				    GValue * value, GParamSpec * pspec);
-static void gx_pixmap_set_property (GObject * object,
+static void gx_screen_set_property (GObject * object,
 				    guint property_id,
 				    const GValue * value, GParamSpec * pspec);
-/* static void gx_pixmap_mydoable_interface_init(gpointer interface,
+/* static void gx_screen_mydoable_interface_init(gpointer interface,
    gpointer data); */
-static void gx_pixmap_init (GXPixmap * self);
-static void gx_pixmap_finalize (GObject * self);
+static void gx_screen_init (GXScreen * self);
+static void gx_screen_finalize (GObject * self);
 
 
-/* Variables */
-static GXDrawableClass *parent_class = NULL;
-/* static guint gx_pixmap_signals[LAST_SIGNAL] = { 0 }; */
+static GObjectClass *parent_class = NULL;
+/* static guint gx_screen_signals[LAST_SIGNAL] = { 0 }; */
 
-G_DEFINE_TYPE (GXPixmap, gx_pixmap, GX_TYPE_DRAWABLE);
+G_DEFINE_TYPE (GXScreen, gx_screen, G_TYPE_OBJECT);
 
 static void
-gx_pixmap_class_init (GXPixmapClass * klass)	/* Class Initialization */
+gx_screen_class_init (GXScreenClass * klass)	/* Class Initialization */
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   /* GParamSpec *new_param; */
 
   parent_class = g_type_class_peek_parent (klass);
 
-  gobject_class->finalize = gx_pixmap_finalize;
+  gobject_class->finalize = gx_screen_finalize;
 
-  gobject_class->get_property = gx_pixmap_get_property;
-  gobject_class->set_property = gx_pixmap_set_property;
+  gobject_class->get_property = gx_screen_get_property;
+  gobject_class->set_property = gx_screen_set_property;
 
   /* set up properties */
 #if 0
@@ -116,13 +130,14 @@ gx_pixmap_class_init (GXPixmapClass * klass)	/* Class Initialization */
   /* set up signals */
 #if 0 /* template code */
   klass->signal_member = signal_default_handler;
-  gx_pixmap_signals[SIGNAL_NAME] =
+  gx_screen_signals[SIGNAL_NAME] =
     g_signal_new ("signal_name", /* name */
-		  G_TYPE_FROM_CLASS(klass), /* interface GType */
-		  G_SIGNAL_RUN_LAST, /* signal flags */
-		  G_STRUCT_OFFSET(GXPixmapClass, signal_member),
-		  NULL, /* accumulator */
-		  NULL, /* accumulator data */
+		  G_TYPE_FROM_CLASS (klass), /* interface GType */
+		  G_SIGNAL_RUN_LAST,	/* signal flags */
+		  /* accumulator */
+		  G_STRUCT_OFFSET (GXScreenClass, signal_member),
+		  NULL,
+		  NULL,	/* accumulator data */
 		  g_cclosure_marshal_VOID__VOID, /* c marshaller */
 		  G_TYPE_NONE, /* return type */
 		  0 /* number of parameters */
@@ -130,14 +145,14 @@ gx_pixmap_class_init (GXPixmapClass * klass)	/* Class Initialization */
     );
 #endif
 
-  g_type_class_add_private (klass, sizeof (GXPixmapPrivate));
+  g_type_class_add_private (klass, sizeof (GXScreenPrivate));
 }
 
 static void
-gx_pixmap_get_property (GObject * object,
+gx_screen_get_property (GObject * object,
 			guint id, GValue * value, GParamSpec * pspec)
 {
-  /* GXPixmap* self = GX_PIXMAP(object); */
+  /* GXScreen* self = GX_SCREEN(object); */
 
   switch (id)
     {
@@ -153,57 +168,57 @@ gx_pixmap_get_property (GObject * object,
 }
 
 static void
-gx_pixmap_set_property (GObject * object,
+gx_screen_set_property (GObject * object,
 			guint property_id,
 			const GValue * value, GParamSpec * pspec)
 {
-  /* GXPixmap* self = GX_PIXMAP(object); */
+  /* GXScreen* self = GX_SCREEN(object); */
 
   switch (property_id)
     {
 #if 0				/* template code */
     case PROP_NAME:
-      gx_pixmap_set_property (self, g_value_get_int (value));
+      gx_screen_set_property (self, g_value_get_int (value));
       break;
 #endif
     default:
-      g_warning ("gx_pixmap_set_property on unknown property");
+      g_warning ("gx_screen_set_property on unknown property");
       return;
     }
 }
 
 #if 0				/* template code */
 static void
-gx_pixmap_mydoable_interface_init (gpointer interface, gpointer data)
+gx_screen_mydoable_interface_init (gpointer interface, gpointer data)
 {
   MyDoableIface *mydoable = interface;
   g_assert (G_TYPE_FROM_INTERFACE (mydoable) == MY_TYPE_MYDOABLE);
 
-  mydoable->method1 = gx_pixmap_method1;
-  mydoable->method2 = gx_pixmap_method2;
+  mydoable->method1 = gx_screen_method1;
+  mydoable->method2 = gx_screen_method2;
 }
 #endif
 
 /* Instance Construction */
 static void
-gx_pixmap_init (GXPixmap * self)
+gx_screen_init (GXScreen * self)
 {
-  self->priv = GX_PIXMAP_GET_PRIVATE (self);
-  /* populate object here */
+  self->priv = GX_SCREEN_GET_PRIVATE (self);
+  /* populate your object here */
 }
 
 /* Instantiation wrapper */
-GXPixmap *
-gx_pixmap_new (void)
+GXScreen *
+gx_screen_new (void)
 {
-  return GX_PIXMAP (g_object_new (gx_pixmap_get_type (), NULL));
+  return GX_SCREEN (g_object_new (gx_screen_get_type (), NULL));
 }
 
 /* Instance Destruction */
 void
-gx_pixmap_finalize (GObject * object)
+gx_screen_finalize (GObject * object)
 {
-  /* GXPixmap *self = GX_PIXMAP(object); */
+  /* GXScreen *self = GX_SCREEN(object); */
 
   /* destruct your object here */
   G_OBJECT_CLASS (parent_class)->finalize (object);

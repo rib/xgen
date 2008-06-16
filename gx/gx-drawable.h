@@ -26,9 +26,9 @@
 #ifndef GX_DRAWABLE_H
 #define GX_DRAWABLE_H
 
-#include "gx-connection.h"
-#include "gx-gcontext.h"
-#include "gx-types.h"
+#include <gx/gx-connection.h>
+#include <gx/gx-gcontext.h>
+#include <gx/gx-types.h>
 
 #include <glib.h>
 #include <glib-object.h>
@@ -81,7 +81,7 @@ GXDrawable *gx_drawable_new (void);
 guint32 gx_drawable_get_xid (GXDrawable * self);
 
 /* TODO - split this into seperate files */
-#include "gx-drawable-gen.h"
+#include <gx/gx-drawable-gen.h>
 
 G_END_DECLS
 #endif /* GX_DRAWABLE_H */
