@@ -1,7 +1,6 @@
 /*
  * <preamble>
- * gswat - A graphical program debugger for Gnome
- * Copyright (C) 2006  Robert Bragg
+ * Copyright (C) 2008  Robert Bragg
  * </preamble>
  *
  * <license>
@@ -32,7 +31,6 @@
 
 #include <glib.h>
 #include <glib-object.h>
-/* include your parent object here */
 
 #include <xcb/xcb.h>
 
@@ -60,16 +58,18 @@ typedef struct _GXWindow            GXWindow;
 #define GX_IS_CONNECTION_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GX_TYPE_CONNECTION))
 #define GX_CONNECTION_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GX_TYPE_CONNECTION, GXConnectionClass))
 
-typedef struct _GXConnection        GXConnection;
+/* To handle circular dependency between the gx-connection and gx-cookie
+ * headers */
+#if !defined (GX_CONNECTION_TYPEDEF)
+typedef struct _GXConnection GXConnection;
+#define GX_CONNECTION_TYPEDEF
+#endif
 typedef struct _GXConnectionClass   GXConnectionClass;
 typedef struct _GXConnectionPrivate GXConnectionPrivate;
 
 struct _GXConnection
 {
-  /* add your parent type here */
   GObject parent;
-
-  /* add pointers to new members here */
 
   /*< private > */
   GXConnectionPrivate *priv;
@@ -77,18 +77,24 @@ struct _GXConnection
 
 struct _GXConnectionClass
 {
-  /* add your parent class here */
   GObjectClass parent_class;
 
-  /* add signals here */
+  /* Signals */
   void (* event) (GXConnection *object, GXGenericEvent *event);
-  void (* reply) (GXConnection *object, GXGenericEvent *event);
+#if 0
+  void (* reply) (GXConnection *object, GXCookie *cookie);
+  void (* error) (GXConnection *object, GXCookie *cookie);
+#endif
 };
+
+#if !defined (GX_COOKIE_TYPEDEF)
+typedef struct _GXCookie GXCookie;
+#define GX_COOKIE_TYPEDEF
+#endif
 
 GType gx_connection_get_type(void);
 
-/* add additional methods here */
-GXConnection *gx_connection_new(const char *display);
+GXConnection *gx_connection_new (const char *display);
 
 xcb_connection_t *
 gx_connection_get_xcb_connection (GXConnection *connection);
@@ -99,7 +105,16 @@ gx_connection_get_root_window (GXConnection *connection);
 void
 gx_connection_flush (GXConnection *connection, gboolean flush_server);
 
-void gx_main(void);
+gboolean
+gx_connection_has_error (GXConnection *self);
+
+void
+gx_connection_register_cookie (GXConnection *self, GXCookie *cookie);
+void
+gx_connection_unregister_cookie (GXConnection *self, GXCookie *cookie);
+
+void gx_main (void);
+void gx_main_quit (void);
 
 /* TODO - split this into seperate files */
 #include <gx/gx-connection-gen.h>

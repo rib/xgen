@@ -54,7 +54,7 @@ main(int argc, char **argv)
 			  0 /* event mask */
 			  );
 
-  gx_window_map_window (window);
+  gx_window_map_window (window, NULL);
 
   gx_connection_flush (connection, FALSE);
 

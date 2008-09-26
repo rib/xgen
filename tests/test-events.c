@@ -44,11 +44,12 @@ main(int argc, char **argv)
 			  GX_EVENT_MASK_EXPOSURE);
 
   gx_window_change_window_attributes (window,
-				      change_window_attribute_values);
+				      change_window_attribute_values,
+				      NULL);
 
-  gx_window_map_window (window);
+  gx_window_map_window (window, NULL);
 
-  query_tree = gx_window_query_tree (root);
+  query_tree = gx_window_query_tree (root, NULL);
 
   array = gx_window_query_tree_get_children (query_tree);
   children = (GXWindow **)array->data;
@@ -58,7 +59,7 @@ main(int argc, char **argv)
       if (child == window)
 	{
 	  g_print ("Fooo\n");
-	  gx_window_get_window_attributes (window);
+	  gx_window_get_window_attributes (window, NULL);
 	}
       g_print ("child\n");
     }

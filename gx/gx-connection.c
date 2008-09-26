@@ -16,12 +16,14 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ * MA  02110-1301, USA.
  * </license>
  *
  */
 
 #include <gx/gx-connection.h>
+#include <gx/gx-cookie.h>
 #include <gx/gx-drawable.h>
 #include <gx/gx-window.h>
 #include <gx/gx-types.h>
@@ -35,11 +37,13 @@
 #include <string.h>
 
 /* Macros and defines */
-#define GX_CONNECTION_GET_PRIVATE(object) (G_TYPE_INSTANCE_GET_PRIVATE ((object), GX_TYPE_CONNECTION, GXConnectionPrivate))
+#define GX_CONNECTION_GET_PRIVATE(object) \
+  (G_TYPE_INSTANCE_GET_PRIVATE ((object), GX_TYPE_CONNECTION, GXConnectionPrivate))
 
 enum {
     EVENT_SIGNAL,
     REPLY_SIGNAL,
+    ERROR_SIGNAL,
     LAST_SIGNAL
 };
 
@@ -51,19 +55,38 @@ enum {
 struct _GXConnectionPrivate
 {
   xcb_connection_t  *xcb_connection;
-  gchar		    *display;
-  int		     screen_num;
-  xcb_screen_t	    *screen;
-  GXWindow	    *root;
 
-  guint		     xcb_source_id;
+  gchar		*display;
+  int		 screen_num;
+  xcb_screen_t	*screen;
+  GXWindow	*root;
 
-  /* NB: This mechanism wouldn't be needed if only xcb had
-   * a way to poll for replies without needing to pass a
-   * sequence number. */
-  GQueue	    *pending_reply_sequences;
+  guint		 xcb_source_id;
 
-  gboolean	     has_error;
+  /* While cookies are registered with a connection they are in
+   * one of the the two following lists. */
+
+  /** The list of cookies for which no reply/error has yet been
+   * recieved
+   */
+  GQueue	*pending_reply_cookies;
+
+  /** The list of cookies for which a reply has been recieved
+   * but they are still registered and owned by the connection */
+  GQueue	*zombie_reply_cookies;
+
+  /* Events, replies and errors are queued up when retrieving them
+   * from XCB so they may be dispatched one at a time from a custom
+   * GSource to ensure the mainloop remains interactive. */
+  GQueue	*events_queue;
+  GQueue	*response_queue;
+#if 0
+  GQueue	*replies_queue;
+  GQueue	*errors_queue;
+#endif
+
+  /** Indicates that connecting to the X server failed. */
+  gboolean	 has_error;
 };
 
 typedef struct
@@ -71,11 +94,26 @@ typedef struct
   GSource	       source;
   GPollFD	       xcb_poll_fd;
   GXConnection	      *connection;
+#if 0
   xcb_generic_event_t *event;
   void		      *reply;
   xcb_generic_error_t *error;
+#endif
 }GXXCBFDSource;
 
+typedef enum _XCBResponseType
+{
+  _GX_COOKIE_RESPONSE_TYPE_REPLY,
+  _GX_COOKIE_RESPONSE_TYPE_ERROR
+} XCBResponseType;
+
+typedef struct _XCBResponseData
+{
+  XCBResponseType  type;
+  unsigned int	   sequence;
+  GXCookie	  *cookie;
+  void		  *data;
+} XCBResponseData;
 
 /* Function definitions */
 static void gx_connection_get_property (GObject *object,
@@ -91,14 +129,15 @@ static void gx_connection_mydoable_interface_init (gpointer interface,
 						   gpointer data);
 */
 static void connect_to_display (GXConnection *self, const char *display);
+void gx_connection_dispose (GObject *object);
 static void gx_connection_finalize (GObject *self);
 
 
-/* Variables */
-static GObjectClass *parent_class = NULL;
 static guint gx_connection_signals[LAST_SIGNAL] = { 0 };
 
+static GMainLoop *loop;
 
+/* NB: This declares gx_connection_parent_class */
 G_DEFINE_TYPE (GXConnection, gx_connection, G_TYPE_OBJECT);
 
 
@@ -108,20 +147,19 @@ gx_connection_class_init (GXConnectionClass *klass)
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GParamSpec *new_param;
 
-  parent_class = g_type_class_peek_parent (klass);
-
   gobject_class->finalize = gx_connection_finalize;
+  gobject_class->dispose = gx_connection_dispose;
 
   gobject_class->get_property = gx_connection_get_property;
   gobject_class->set_property = gx_connection_set_property;
 
-  new_param = g_param_spec_string("display", /* name */
-				  "Display", /* nick name */
-				  "X Server Display", /* description */
-				  NULL, /* default */
-				  G_PARAM_READABLE
-				  | G_PARAM_WRITABLE
-				  | G_PARAM_CONSTRUCT_ONLY
+  new_param = g_param_spec_string ("display", /* name */
+				   "Display", /* nick name */
+				   "X Server Display", /* description */
+				   NULL, /* default */
+				   G_PARAM_READABLE
+				   | G_PARAM_WRITABLE
+				   | G_PARAM_CONSTRUCT_ONLY
   );
   g_object_class_install_property (gobject_class,
 				   PROP_DISPLAY,
@@ -135,57 +173,72 @@ gx_connection_class_init (GXConnectionClass *klass)
 		  G_STRUCT_OFFSET (GXConnectionClass, event),
 		  NULL, /* accumulator */
 		  NULL,	/* accumulator data */
-		  g_cclosure_marshal_VOID__VOID, /* c marshaller */
+		  g_cclosure_marshal_VOID__POINTER, /* c marshaller */
 		  G_TYPE_NONE,	/* return type */
 		  0 /* number of parameters */
 		  /* vararg, list of param types */
     );
+#if 0
   klass->reply = NULL;
   gx_connection_signals[REPLY_SIGNAL] =
     g_signal_new ("reply", /* name */
 		  G_TYPE_FROM_CLASS (klass), /* interface GType */
 		  G_SIGNAL_RUN_LAST, /* signal flags */
-		  G_STRUCT_OFFSET (GXConnectionClass, event),
+		  G_STRUCT_OFFSET (GXConnectionClass, reply),
 		  NULL, /* accumulator */
 		  NULL,	/* accumulator data */
-		  g_cclosure_marshal_VOID__VOID, /* c marshaller */
+		  g_cclosure_marshal_VOID__OBJECT, /* c marshaller */
 		  G_TYPE_NONE,	/* return type */
 		  0 /* number of parameters */
 		  /* vararg, list of param types */
     );
+  klass->error = NULL;
+  gx_connection_signals[ERROR_SIGNAL] =
+    g_signal_new ("error", /* name */
+		  G_TYPE_FROM_CLASS (klass), /* interface GType */
+		  G_SIGNAL_RUN_LAST, /* signal flags */
+		  G_STRUCT_OFFSET (GXConnectionClass, error),
+		  NULL, /* accumulator */
+		  NULL,	/* accumulator data */
+		  g_cclosure_marshal_VOID__OBJECT, /* c marshaller */
+		  G_TYPE_NONE,	/* return type */
+		  0 /* number of parameters */
+		  /* vararg, list of param types */
+    );
+#endif
 
-  g_type_class_add_private(klass, sizeof(GXConnectionPrivate));
+  g_type_class_add_private (klass, sizeof(GXConnectionPrivate));
 }
 
 static void
-gx_connection_get_property(GObject *object,
-			   guint id,
-			   GValue *value,
-			   GParamSpec *pspec)
+gx_connection_get_property (GObject *object,
+			    guint id,
+			    GValue *value,
+			    GParamSpec *pspec)
 {
-  /* GXConnection* self = GX_CONNECTION(object); */
+  /* GXConnection* self = GX_CONNECTION (object); */
 
-  switch(id) {
+  switch (id) {
 #if 0 /* template code */
     case PROP_NAME:
       g_value_set_int(value, self->priv->property);
       break;
 #endif
     default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID(object, id, pspec);
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, id, pspec);
       break;
   }
 }
 
 static void
-gx_connection_set_property(GObject *object,
-			   guint property_id,
-			   const GValue *value,
-			   GParamSpec *pspec)
+gx_connection_set_property (GObject *object,
+			    guint property_id,
+			    const GValue *value,
+			    GParamSpec *pspec)
 {
-  GXConnection* self = GX_CONNECTION(object);
+  GXConnection* self = GX_CONNECTION (object);
 
-  switch(property_id)
+  switch (property_id)
     {
 #if 0 /* template code */
     case PROP_NAME:
@@ -193,12 +246,12 @@ gx_connection_set_property(GObject *object,
       break;
 #endif
     case PROP_DISPLAY:
-      self->priv->display = g_value_dup_string(value);
-      connect_to_display(self,self->priv->display);
+      self->priv->display = g_value_dup_string (value);
+      connect_to_display (self, self->priv->display);
       break;
 
     default:
-      g_warning("gx_connection_set_property on unknown property");
+      g_warning ("gx_connection_set_property on unknown property");
       return;
     }
 }
@@ -209,7 +262,12 @@ gx_connection_init (GXConnection *self)
   self->priv = GX_CONNECTION_GET_PRIVATE (self);
   /* populate your object here */
 
-  self->priv->pending_reply_sequences = g_queue_new ();
+  self->priv->events_queue = g_queue_new ();
+  self->priv->response_queue = g_queue_new ();
+#if 0
+  self->priv->replies_queue = g_queue_new ();
+  self->priv->errors_queue = g_queue_new ();
+#endif
 }
 
 GXConnection *
@@ -227,9 +285,83 @@ gx_connection_finalize (GObject *object)
 {
   GXConnection *self = GX_CONNECTION (object);
 
-  g_queue_free (self->priv->pending_reply_sequences);
+  g_queue_free (self->priv->events_queue);
+  g_queue_free (self->priv->response_queue);
+#if 0
+  g_queue_free (self->priv->replies_queue);
+  g_queue_free (self->priv->errors_queue);
+#endif
 
-  G_OBJECT_CLASS (parent_class)->finalize (object);
+  G_OBJECT_CLASS (gx_connection_parent_class)->finalize (object);
+}
+
+static void
+cookie_pending_finalized_notify (gpointer data,
+				 GObject *old_cookie)
+{
+  GXConnection *self = data;
+
+  g_queue_remove (self->priv->pending_reply_cookies, old_cookie);
+}
+
+static void
+response_queue_remove_cookie_references (GXConnection *self,
+					 const GXCookie *cookie)
+{
+  GList *tmp;
+
+  for (tmp = self->priv->response_queue->head;
+       tmp != NULL;
+       tmp = tmp->next)
+    {
+      XCBResponseData *response = tmp->data;
+      if (response->cookie == cookie)
+	{
+	  g_queue_delete_link (self->priv->response_queue, tmp);
+	  break;
+	}
+    }
+}
+
+static void
+cookie_zombie_finalized_notify (gpointer data,
+				GObject *old_cookie)
+{
+  GXConnection *self = data;
+
+  response_queue_remove_cookie_references (self, GX_COOKIE (old_cookie));
+
+  g_queue_remove (self->priv->zombie_reply_cookies, old_cookie);
+}
+
+void
+gx_connection_dispose (GObject *object)
+{
+  GXConnection *self = GX_CONNECTION (object);
+  GList *copy_list;
+  GList *tmp;
+
+  /* NB: There is a circular dependency between connection and
+   * cookie objects.
+   */
+
+  /* We copy the list so we can use gx_connection_unregister_cookie
+   * (which modifies the pending/zombie_reply_cookies lists).
+   *
+   * We use gx_connection_unregister_cookie so we only have one
+   * place to deal with unregistering/unrefing cookies from the
+   * connection */
+  copy_list = g_list_copy (self->priv->pending_reply_cookies->head);
+  for (tmp = copy_list; tmp != NULL; tmp = tmp->next)
+    gx_connection_unregister_cookie (self, tmp->data);
+  g_list_free (copy_list);
+
+  copy_list = g_list_copy (self->priv->zombie_reply_cookies->head);
+  for (tmp = copy_list; tmp != NULL; tmp = tmp->next)
+    gx_connection_unregister_cookie (self, tmp->data);
+  g_list_free (copy_list);
+
+  G_OBJECT_CLASS (gx_connection_parent_class)->dispose (object);
 }
 
 xcb_connection_t *
@@ -252,27 +384,116 @@ screen_of_connection (xcb_connection_t *c,
   return NULL;
 }
 
-static void
-check_for_any_reply_or_error (GXConnection *connection,
+static GXCookie *
+check_for_any_reply_or_error (GXConnection *self,
 			      void **reply,
 			      xcb_generic_error_t **error)
 {
   xcb_connection_t *xcb_connection =
-    gx_connection_get_xcb_connection (connection);
+    gx_connection_get_xcb_connection (self);
   GList *tmp;
 
-  g_return_if_fail (*reply == NULL);
-  g_return_if_fail (*error == NULL);
+  g_return_val_if_fail (*reply == NULL, NULL);
+  g_return_val_if_fail (*error == NULL, NULL);
 
-  for (tmp = connection->priv->pending_reply_sequences->head;
+  for (tmp = self->priv->pending_reply_cookies->head;
        tmp != NULL;
        tmp = tmp->next)
     {
-      unsigned int request = GPOINTER_TO_INT (tmp->data);
+      GXCookie *cookie = tmp->data;
+      unsigned int request = gx_cookie_get_sequence (cookie);
       xcb_poll_for_reply (xcb_connection, request, reply, error);
+#if 0
+#error "FIXME: check xcb_poll_for_reply semantics. Does obtaining a reply/error pointer"
+#error "this way mean we can't then call xcb_blah_reply(xcb_cookie) to get the same pointer?"
+#error "I guess not. Can we perhaps push the reply/error back in to xcb if not?"
+#endif
       if (reply || error)
-	g_queue_remove (connection->priv->pending_reply_sequences, tmp->data);
+	{
+	  g_queue_remove (self->priv->pending_reply_cookies,
+			  cookie);
+	  g_object_weak_unref (G_OBJECT (cookie),
+			       cookie_pending_finalized_notify,
+			       self);
+
+	  g_queue_push_tail (self->priv->zombie_reply_cookies,
+			     cookie);
+	  g_object_weak_ref (G_OBJECT (cookie),
+			     cookie_zombie_finalized_notify,
+			     self);
+	  return cookie;
+	}
     }
+
+  return NULL;
+}
+
+static gboolean
+check_for_any_data (GXConnection *self)
+{
+  xcb_connection_t *xcb_connection =
+    gx_connection_get_xcb_connection (self);
+  xcb_generic_event_t *event;
+  void *reply;
+  xcb_generic_error_t *error;
+  GXCookie *cookie = NULL;
+
+  if (g_queue_peek_head (self->priv->events_queue) != NULL)
+    return TRUE;
+  event = xcb_poll_for_event (xcb_connection);
+  if (event)
+    {
+      g_queue_push_tail (self->priv->events_queue, event);
+      return TRUE;
+    }
+
+#if 0
+  g_assert (!xcb_source->event);
+  xcb_source->event = xcb_poll_for_event (xcb_connection);
+  if (xcb_source->event)
+    return TRUE;
+#endif
+
+#if 0
+  if (g_queue_peek_head (self->priv->replies_queue) != NULL
+      || g_queue_peek_head (self->priv->errors_queue) != NULL)
+    return TRUE;
+#endif
+
+  if (g_queue_peek_head (self->priv->response_queue) != NULL)
+    return TRUE;
+
+  /* FIXME: This doesn't seem to be a very nice way to have to deal with
+   * replies, but xcb does not currently have a xcb_poll_for_any_reply()
+   * function and so you have to pass xcb a specific sequence number.
+   */
+  cookie = check_for_any_reply_or_error (self,
+					 &reply,
+					 &error);
+  if (cookie)
+    {
+      XCBResponseData *response_data =
+	g_slice_alloc (sizeof (XCBResponseData));
+      response_data->cookie = cookie;
+
+      if (reply)
+	{
+	  response_data->type = _GX_COOKIE_RESPONSE_TYPE_REPLY;
+	  response_data->data = reply;
+	}
+      else
+	{
+	  response_data->type = _GX_COOKIE_RESPONSE_TYPE_ERROR;
+	  response_data->data = error;
+	}
+
+      g_queue_push_tail (self->priv->response_queue, response_data);
+
+      return TRUE;
+    }
+
+
+  return FALSE;
 }
 
 static gboolean
@@ -280,29 +501,12 @@ xcb_event_prepare (GSource *source,
 		   gint    *timeout)
 {
   GXXCBFDSource *xcb_source = (GXXCBFDSource *)source;
-  xcb_connection_t *xcb_connection =
-    gx_connection_get_xcb_connection (xcb_source->connection);
-
-  g_assert (!xcb_source->event);
-  xcb_source->event = xcb_poll_for_event (xcb_connection);
-  if (xcb_source->event)
-    return TRUE;
-
-  /* TODO: This doesn't seem to be a very nice way to have to deal with
-   * replies, but xcb does not currently have a xcb_poll_for_any_reply()
-   * function and so you have to pass xcb a specific sequence number.
-   */
-  g_assert (!xcb_source->reply);
-  check_for_any_reply_or_error (xcb_source->connection,
-				&xcb_source->reply,
-				&xcb_source->error);
-  if (xcb_source->reply || xcb_source->error)
-    return TRUE;
+  //GXConnection *self = xcb_source->connection;
 
   /* We don't mind how long poll() will block */
   *timeout = -1;
 
-  return FALSE;
+  return check_for_any_data (xcb_source->connection);
 }
 
 static gboolean
@@ -311,7 +515,7 @@ xcb_event_check (GSource *source)
   GXXCBFDSource *xcb_source = (GXXCBFDSource *)source;
 
   if (xcb_source->xcb_poll_fd.revents & G_IO_IN)
-    return TRUE;
+    return check_for_any_data (xcb_source->connection);
 
   return FALSE;
 }
@@ -319,33 +523,45 @@ xcb_event_check (GSource *source)
 static void
 signal_event (GXConnection *connection, xcb_generic_event_t *event)
 {
-  static guint event_signal = 0;
-
   g_print ("event\n");
 
-  if (!event_signal)
-    event_signal = g_signal_lookup ("event", GX_TYPE_CONNECTION);
-
   /* FIXME - we should be able to determine the event window of an
-   * event and send the signal from the corresponding GXWindow. */
+   * event and also send a signal from the corresponding GXWindow. */
 
   /* TODO: we should use the name of the signal as the detail */
-  g_signal_emit (connection, event_signal, 0, event);
+  g_signal_emit (connection, EVENT_SIGNAL, 0, event);
 
 }
 
 static void
-signal_reply (GXConnection *connection, xcb_generic_reply_t *reply)
+signal_reply (GXConnection *connection, GXCookie *cookie)
 {
+  static guint reply_signal = 0;
+
   g_print ("reply\n");
+
+  if (!reply_signal)
+    reply_signal = g_signal_lookup ("reply", GX_TYPE_COOKIE);
+
+  g_signal_emit (cookie, reply_signal, 0);
+  g_signal_emit (connection, REPLY_SIGNAL, 0);
 }
 
 static void
-signal_error (GXConnection *connection, xcb_generic_error_t *error)
+signal_error (GXConnection *connection, GXCookie *cookie)
 {
+  static guint error_signal = 0;
+
   g_print ("error\n");
+
+  if (!error_signal)
+    error_signal = g_signal_lookup ("error", GX_TYPE_COOKIE);
+
+  g_signal_emit (cookie, error_signal, 0);
+  g_signal_emit (connection, ERROR_SIGNAL, 0);
 }
 
+#if 0
 static gboolean
 xcb_event_dispatch (GSource *source, GSourceFunc callback, gpointer data)
 {
@@ -353,17 +569,22 @@ xcb_event_dispatch (GSource *source, GSourceFunc callback, gpointer data)
   xcb_connection_t    *xcb_connection =
     gx_connection_get_xcb_connection (xcb_source->connection);
   xcb_generic_event_t *event;
+  GXCookie	      *cookie;
   void		      *reply;
   xcb_generic_error_t *error;
 
-  xcb_source->event = NULL;
   event = xcb_source->event;
+  xcb_source->event = NULL;
 
-  xcb_source->reply = NULL;
+  cookie = xcb_source->cookie;
+  g_object_unref (xcb_source->cookie);
+  xcb_source->cookie = NULL;
+
   reply = xcb_source->reply;
+  xcb_source->reply = NULL;
 
-  xcb_source->error = NULL;
   error = xcb_source->error;
+  xcb_source->error = NULL;
 
   do
     {
@@ -372,18 +593,58 @@ xcb_event_dispatch (GSource *source, GSourceFunc callback, gpointer data)
 
       event = xcb_poll_for_event (xcb_connection);
 
-      if (reply)
-	signal_reply (xcb_source->connection, reply);
-      else if (error)
-	signal_error (xcb_source->connection, error);
+      if (cookie)
+	{
+	  if (reply)
+	    signal_reply (xcb_source->connection, cookie);
+	  else if (error)
+	    signal_error (xcb_source->connection, cookie);
+	  else
+	    g_assert (0);
+	}
 
-      check_for_any_reply_or_error (xcb_source->connection,
-				    &reply,
-				    &error);
+      cookie =
+	check_for_any_reply_or_error (xcb_source->connection,
+				      &reply,
+				      &error);
     } while (event || reply || error);
 
   return TRUE;
 }
+#endif
+static gboolean
+xcb_event_dispatch (GSource *source, GSourceFunc callback, gpointer data)
+{
+  GXXCBFDSource	*xcb_source = (GXXCBFDSource *)source;
+  GXConnection	*connection = xcb_source->connection;
+
+  /* Queue up all data recieved from XCB. */
+  while (check_for_any_data (connection))
+    ; /*  */
+
+  if (g_queue_peek_head (connection->priv->events_queue))
+    {
+      xcb_generic_event_t *event =
+	g_queue_pop_head (connection->priv->events_queue);
+      signal_event (xcb_source->connection, event);
+      return TRUE;
+    }
+
+  if (g_queue_peek_head (connection->priv->response_queue))
+    {
+      XCBResponseData *response =
+	g_queue_pop_head (connection->priv->response_queue);
+      if (response->type == _GX_COOKIE_RESPONSE_TYPE_REPLY)
+	gx_cookie_set_reply (response->cookie, response->data);
+      else
+	gx_cookie_set_error (response->cookie, response->data);
+      g_slice_free (XCBResponseData, response);
+      return TRUE;
+    }
+
+  return FALSE;
+}
+
 
 static GSourceFuncs xcb_source_funcs = {
     .prepare = xcb_event_prepare,
@@ -406,9 +667,11 @@ add_xcb_event_source(GXConnection *self)
 
   xcb_source = (GXXCBFDSource *)source;
   xcb_source->connection = self;
+#if 0
   xcb_source->event = NULL;
   xcb_source->reply = NULL;
   xcb_source->error = NULL;
+#endif
   xcb_source->xcb_poll_fd.fd = fd;
   xcb_source->xcb_poll_fd.events = G_IO_IN;
 
@@ -471,7 +734,6 @@ gx_connection_flush (GXConnection *connection, gboolean flush_server)
 void
 gx_main (void)
 {
-  GMainLoop *loop;
 
 #if 0
   if (!gx_is_initialized)
@@ -488,10 +750,84 @@ gx_main (void)
 
 }
 
+void
+gx_main_quit (void)
+{
+  g_main_loop_quit (loop);
+}
+
 gboolean
 gx_connection_has_error (GXConnection *self)
 {
   return self->priv->has_error;
+}
+
+/**
+ * gx_connection_register_cookie:
+ * @self: a GX Connection
+ * @cookie: a new GX Cookie
+ *
+ * This registers a new cookie with a connection so that a reply corresponding
+ * to that cookie can trigger a signal to the user.
+ *
+ * Typically you wouldn't have to do this yourself since any cookies you get
+ * back from auto generated GX APIs will already be registered with your
+ * connection.
+ *
+ * This function takes a reference on the cookie, which means that developers
+ * shouldn't normally need to worry about managing the ref count of cookies.
+ *
+ * The cookie will be unref'd when it is unregistered from the connection,
+ * which automatically happens via the gx_*_reply() functions.
+ */
+void
+gx_connection_register_cookie (GXConnection *self, GXCookie *cookie)
+{
+  g_object_ref (cookie);
+
+  /* If developers manually unref a cookie, instead of calling
+   * gx_connection_unregister_cookie, then we will be notified, and all will
+   * be well.
+   *
+   * NB: We depend on the behaviour within gx_*_reply() functions.
+   * It's slightly slimpler than calling gx_connection_unregister_cookie
+   * because the weak pointer callbacks know which priv queue the
+   * cookie is currently in. */
+
+  g_object_weak_ref (G_OBJECT (cookie),
+		     cookie_pending_finalized_notify,
+		     self);
+  g_queue_push_tail (self->priv->pending_reply_cookies,
+		     cookie);
+}
+
+/**
+ * gx_connection_unregister_cookie:
+ * @self: a GX Connection
+ * @cookie: a new GX Cookie
+ *
+ * After calling this function the GXConnection will no longer be able to
+ * cause a signal based notification of a reply for the coresponding cookie.
+ *
+ * As with gx_connection_register_cookie, developers shouldn't normally need
+ * to use this directly since cookies are automatically unregistered via the
+ * gx_*_reply() functions.
+ */
+void
+gx_connection_unregister_cookie (GXConnection *self, GXCookie *cookie)
+{
+  g_queue_remove (self->priv->pending_reply_cookies, cookie);
+  g_queue_remove (self->priv->zombie_reply_cookies, cookie);
+
+  response_queue_remove_cookie_references (self, cookie);
+
+  g_object_weak_unref (G_OBJECT (cookie),
+		       cookie_pending_finalized_notify,
+		       self);
+  g_object_weak_unref (G_OBJECT (cookie),
+		       cookie_zombie_finalized_notify,
+		       self);
+  g_object_unref (cookie);
 }
 
 #include "gx-connection-gen.c"

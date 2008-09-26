@@ -70,6 +70,8 @@ typedef enum
   GXGEN_PART_GCONTEXT_OBJ_C_PROTOS,
   GXGEN_PART_GCONTEXT_OBJ_C_FUNCS,
 
+  GXGEN_PART_COOKIE_OBJ_H_TYPEDEFS,
+
   GXGEN_PART_COUNT
 } GXGenPart;
 
@@ -195,25 +197,6 @@ typedef struct
   guint		 bit;
 } GXGenItemDefinition;
 
-/* Concrete definitions for opaque and private structure types. */
-typedef struct
-{
-  unsigned char	   opcode;
-  GXGenDefinition *definition;
-} GXGenRequest;
-
-typedef struct
-{
-  unsigned char	   number;
-  GXGenDefinition *definition;
-} GXGenEvent;
-
-typedef struct
-{
-  unsigned char	   number;
-  GXGenDefinition *definition;
-} GXGenError;
-
 typedef struct
 {
   char	*name;
@@ -222,6 +205,28 @@ typedef struct
   GList *events;
   GList *errors;
 } GXGenExtension;
+
+/* Concrete definitions for opaque and private structure types. */
+typedef struct
+{
+  /* TODO add extension back reference? */
+  unsigned char	   opcode;
+  GXGenDefinition *definition;
+} GXGenRequest;
+
+typedef struct
+{
+  /* TODO add extension back reference? */
+  unsigned char	   number;
+  GXGenDefinition *definition;
+} GXGenEvent;
+
+typedef struct
+{
+  /* TODO add extension back reference? */
+  unsigned char	   number;
+  GXGenDefinition *definition;
+} GXGenError;
 
 typedef struct
 {
@@ -355,6 +360,35 @@ static struct camelcase_mapping camelcase_dictionary[] = {
   {"SYM","Sym"},
   {NULL}
 };
+
+/* TODO - rename these
+ * (The idea is to seperate the parser API from the code generation
+ * code)*/
+
+typedef enum {
+  GXGEN_IS_CONNECTION_OBJ,
+  GXGEN_IS_DRAWABLE_OBJ,
+  GXGEN_IS_PIXMAP_OBJ,
+  GXGEN_IS_WINDOW_OBJ,
+  GXGEN_IS_GCONTEXT_OBJ
+} GXGenOutputObjectType;
+
+typedef struct _GXGenOutputObject {
+  GXGenOutputObjectType type;
+  const char *name;
+  const char *first_arg;
+  GXGenFieldDefinition *first_object_field;
+  GXGenPart h_typedefs, h_protos, c_funcs;
+} GXGenOutputObject;
+
+typedef struct _OutputRequest
+{
+  GXGenExtension    *extension;
+  GXGenRequest	    *request;
+  GXGenOutputObject *obj;
+  char		    *xcb_name;
+  char		    *gx_name;
+} OutputRequest;
 
 /* Helper function to avoid casting. */
 static char *
@@ -1326,21 +1360,6 @@ output_enums (GXGenState * state,
 		"} GX%s;\n\n", def->name);
     }
 }
-typedef enum {
-  GXGEN_IS_CONNECTION_OBJ,
-  GXGEN_IS_DRAWABLE_OBJ,
-  GXGEN_IS_PIXMAP_OBJ,
-  GXGEN_IS_WINDOW_OBJ,
-  GXGEN_IS_GCONTEXT_OBJ
-} GXGenOutputObjectType;
-
-typedef struct _GXGenOutputObject {
-  GXGenOutputObjectType type;
-  const char *name;
-  const char *first_arg;
-  GXGenFieldDefinition *first_object_field;
-  GXGenPart h_typedefs, h_protos, c_funcs;
-} GXGenOutputObject;
 
 static GXGenOutputObject *
 identify_request_object (GXGenRequest *request)
@@ -1432,11 +1451,11 @@ identify_request_object (GXGenRequest *request)
 
 static void
 output_reply_typedef (GXGenState * state,
-		   GXGenExtension * extension,
-		   GString ** parts,
-		   GXGenRequest *request,
-		   GXGenOutputObject *obj)
+		      GString ** parts,
+		      OutputRequest *out_request)
 {
+  GXGenRequest *request = out_request->request;
+  GXGenOutputObject *obj = out_request->obj;
   GList *tmp;
   guint pad = 0;
 
@@ -1464,25 +1483,25 @@ output_reply_typedef (GXGenState * state,
 	}
     }
   out (parts, obj->h_typedefs,
-       "\n} GX%sX11Reply;\n\n", request->definition->name);
+       "\n} GX%sX11Reply;\n\n", out_request->gx_name);
 
   out (parts, obj->h_typedefs, "typedef struct {\n");
   out (parts, obj->h_typedefs, "\tGXConnection *connection;\n");
   out (parts, obj->h_typedefs, "\tGX%sX11Reply *x11_reply;\n",
-       request->definition->name);
+       out_request->gx_name);
   out (parts, obj->h_typedefs,
-       "\n} GX%sReply;\n\n", request->definition->name);
+       "\n} GX%sReply;\n\n", out_request->gx_name);
 }
 
 static void
-output_reply_list_get (GXGenState * state,
-		    GXGenExtension * extension,
-		    GString ** parts,
-		    GXGenRequest *request,
-		    GXGenOutputObject *obj)
+output_reply_list_get (GXGenState *state,
+		       GString **parts,
+		       OutputRequest *out_request)
 {
+  GXGenRequest *request = out_request->request;
+  GXGenOutputObject *obj = out_request->obj;
   GXGenFieldDefinition *field;
-  char *name_lc;
+  char *gx_name_lc;
 
   if (!request->definition->reply_fields)
     return;
@@ -1495,25 +1514,26 @@ output_reply_list_get (GXGenState * state,
   if (field->length->type != GXGEN_FIELDREF)
     return;
 
-  name_lc = gxgen_get_lowercase_name (request->definition->name);
+  gx_name_lc = gxgen_get_lowercase_name (out_request->gx_name);
+  /* name_lc = out_request->gx_name_lc; */
 
   out (parts, obj->h_protos,
        "GArray *\n"
        "gx_%s_%s_get_%s (GX%sReply *%s_reply);\n",
        obj->name,
-       name_lc,
+       gx_name_lc,
        field->name,
-       request->definition->name,
-       name_lc);
+       out_request->gx_name,
+       gx_name_lc);
 
   out (parts, obj->c_funcs,
        "GArray *\n"
        "gx_%s_%s_get_%s (GX%sReply *%s_reply)\n",
        obj->name,
-       name_lc,
+       gx_name_lc,
        field->name,
-       request->definition->name,
-       name_lc);
+       out_request->gx_name,
+       gx_name_lc);
 
   out (parts, obj->c_funcs,
        "{\n");
@@ -1522,7 +1542,7 @@ output_reply_list_get (GXGenState * state,
        "  %s *p = (%s *)(%s_reply->x11_reply + 1);\n",
        gxgen_definition_to_gx_type (field->definition, FALSE),
        gxgen_definition_to_gx_type (field->definition, FALSE),
-       name_lc);
+       gx_name_lc);
 
 
   if (is_special_xid_definition (field->definition))
@@ -1542,7 +1562,7 @@ output_reply_list_get (GXGenState * state,
       out (parts, obj->c_funcs,
        "  for (i = 0; i< %s_reply->x11_reply->%s; i++)\n"
        "    {\n",
-       name_lc,
+       gx_name_lc,
        field->length->field);
 
       out (parts, obj->c_funcs,
@@ -1560,7 +1580,7 @@ output_reply_list_get (GXGenState * state,
        "			     \"xid\", p[i],\n"
        "			     \"wrap\", TRUE,\n"
        "			     NULL);\n",
-       obj->name, name_lc);
+       obj->name, gx_name_lc);
 
       out (parts, obj->c_funcs,
        "      tmp = g_array_append_val (tmp, item);\n"
@@ -1570,7 +1590,7 @@ output_reply_list_get (GXGenState * state,
     {
       out (parts, obj->c_funcs,
        "  tmp = g_array_append_vals (tmp, p, %s_reply->x11_reply->%s);\n",
-       name_lc, field->length->field);
+       gx_name_lc, field->length->field);
     }
 
   out (parts, obj->c_funcs,
@@ -1579,18 +1599,18 @@ output_reply_list_get (GXGenState * state,
   out (parts, obj->c_funcs,
        "}\n");
 
-  g_free (name_lc);
+  g_free (gx_name_lc);
 }
 
 static void
 output_reply_list_free (GXGenState * state,
-		     GXGenExtension * extension,
-		     GString ** parts,
-		     GXGenRequest *request,
-		     GXGenOutputObject *obj)
+		        GString ** parts,
+			OutputRequest *out_request)
 {
+  GXGenRequest *request = out_request->request;
+  GXGenOutputObject *obj = out_request->obj;
   GXGenFieldDefinition *field;
-  char *name_lc;
+  char *gx_name_lc;
 
   if (!request->definition->reply_fields)
     return;
@@ -1603,21 +1623,22 @@ output_reply_list_free (GXGenState * state,
   if (field->length->type != GXGEN_FIELDREF)
     return;
 
-  name_lc = gxgen_get_lowercase_name (request->definition->name);
+  gx_name_lc = gxgen_get_lowercase_name (out_request->gx_name);
+  /*name_lc = out_request->gx_name_lc;*/
 
   out (parts, obj->h_protos,
-       "void\n"
+       "\nvoid\n"
        "gx_%s_%s_free_%s (GArray *%s);\n",
        obj->name,
-       name_lc,
+       gx_name_lc,
        field->name,
        field->name);
 
   out (parts, obj->c_funcs,
-       "void\n"
+       "\nvoid\n"
        "gx_%s_%s_free_%s (GArray *%s)\n",
        obj->name,
-       name_lc,
+       gx_name_lc,
        field->name,
        field->name);
 
@@ -1627,63 +1648,585 @@ output_reply_list_free (GXGenState * state,
   if (is_special_xid_definition (field->definition))
     {
       out (parts, obj->c_funcs,
-       "  %s*p = %s->data;\n"
-       "  int i;\n"
-       "  for (i = 0; i < %s->len; i++)\n"
-       "      g_object_unref (p[i]);\n",
+       "\t%s*p = %s->data;\n"
+       "\tint i;\n"
+       "\tfor (i = 0; i < %s->len; i++)\n"
+       "\t\tg_object_unref (p[i]);\n",
        gxgen_definition_to_gx_type (field->definition, TRUE),
        field->name,
        field->name);
     }
 
-  out (parts, obj->c_funcs, "g_array_free (%s, TRUE);\n", field->name);
+  out (parts, obj->c_funcs, "\tg_array_free (%s, TRUE);\n", field->name);
 
   out (parts, obj->c_funcs,
        "}\n");
+
+  g_free (gx_name_lc);
 }
 
 static void
-output_reply_free (GXGenState * state,
-		GXGenExtension * extension,
-		GString ** parts,
-		GXGenRequest *request,
-		GXGenOutputObject *obj)
+output_reply_free (GXGenState *state,
+		   GString **parts,
+		   OutputRequest *out_request)
 {
-  char *name_lc;
+  GXGenRequest *request = out_request->request;
+  GXGenOutputObject *obj = out_request->obj;
+  char *gx_name_lc;
 
   if (!request->definition->reply_fields)
     return;
 
-  name_lc = gxgen_get_lowercase_name (request->definition->name);
+  gx_name_lc = gxgen_get_lowercase_name (out_request->gx_name);
+  /* name_lc = out_request->gx_name_lc; */
 
   out (parts, obj->h_protos,
        "void\n"
        "gx_%s_%s_reply_free (GX%sReply *%s_reply);\n",
        obj->name,
-       name_lc,
-       request->definition->name,
-       name_lc);
+       gx_name_lc,
+       out_request->gx_name,
+       gx_name_lc);
 
   out (parts, obj->c_funcs,
        "void\n"
        "gx_%s_%s_reply_free (GX%sReply *%s_reply)\n",
        obj->name,
-       name_lc,
-       request->definition->name,
-       name_lc);
+       gx_name_lc,
+       out_request->gx_name,
+       gx_name_lc);
 
   out (parts, obj->c_funcs,
        "{\n");
 
   out (parts, obj->c_funcs,
        "  free (%s_reply->x11_reply);\n",
-       name_lc);
+       gx_name_lc);
   out (parts, obj->c_funcs,
        "  g_slice_free (GX%sReply, %s_reply);\n",
-       request->definition->name, name_lc);
+       out_request->gx_name, gx_name_lc);
 
   out (parts, obj->c_funcs,
        "}\n");
+
+  g_free (gx_name_lc);
+}
+
+static void
+output_mask_value_variable_declarations (GString **parts, GXGenPart part)
+{
+  out (parts, part,
+       "\tguint32 value_list_len = "
+	  "gx_mask_value_items_get_count (mask_value_items);\n");
+  out (parts, part,
+       "\tguint32 *value_list = "
+	  "alloca (value_list_len * 4);\n");
+  out (parts, part,
+	"\tguint32 value_mask;\n");
+  out (parts, part,
+	"\n");
+
+  out (parts, part,
+       "\tgx_mask_value_items_get_list (mask_value_items, "
+	  "&value_mask, value_list);\n");
+}
+
+/**
+ * output_reply_variable_definitions:
+ * @parts: Your output streams
+ * @part: The particular stream you to output too
+ * @request: The request to which you will be replying
+ *
+ * This function outputs the variable declarations needed
+ * for preparing a reply. This should be called in the
+ * *_reply () funcs that take a cookie or the synchronous
+ * request functions.
+ */
+static void
+output_reply_variable_declarations (GXGenState *state,
+				    GString **parts,
+				    OutputRequest *out_request)
+{
+  /* GXGenRequest *request = out_request->request; */
+  GXGenOutputObject *obj = out_request->obj;
+  /* char *gx_name_cc; */
+
+  /* name_lc = gxgen_get_lowercase_name (out_request->gx_name); */
+  /* gx_name_cc = gxgen_get_camelcase_name (out_request->gx_name); */
+
+  out (parts, obj->c_funcs,
+       "\txcb_generic_error_t *xcb_error;\n");
+  out (parts, obj->c_funcs,
+       "\tGX%sReply *reply = g_slice_new (GX%sReply);\n",
+       out_request->gx_name,
+       out_request->gx_name);
+
+  /* g_free (name_cc); */
+}
+
+/**
+ * output_async_request:
+ *
+ * This function outputs the code for all gx_*_async () functions
+ */
+void
+output_async_request (GXGenState *state,
+		      GString **parts,
+		      OutputRequest *out_request)
+{
+  GXGenRequest *request = out_request->request;
+  GXGenOutputObject *obj = out_request->obj;
+  GList *tmp;
+  char *cookie_type_uc;
+  char *obj_name_uc;
+  char *gx_name_uc;
+  char *gx_name_lc;
+  char *xcb_name_lc;
+  gboolean has_mask_value_items = FALSE;
+
+  gx_name_lc = gxgen_get_lowercase_name (out_request->gx_name);
+  xcb_name_lc = gxgen_get_lowercase_name (out_request->xcb_name);
+
+
+  /* FIXME */
+  out (parts, obj->h_protos, "\nGXCookie *\ngx_%s_%s_async (%s",
+       obj->name, gx_name_lc, obj->first_arg);
+  out (parts, obj->c_funcs, "\nGXCookie *\ngx_%s_%s_async (%s",
+       obj->name, gx_name_lc, obj->first_arg);
+
+  for (tmp = request->definition->fields; tmp != NULL; tmp = tmp->next)
+    {
+      GXGenFieldDefinition *field = tmp->data;
+      const char *type;
+
+      if (strcmp (field->name, "opcode") == 0
+	  || strcmp (field->name, "pad") == 0
+	  || strcmp (field->name, "length") == 0)
+	continue;
+
+      if (obj->first_object_field && field == obj->first_object_field)
+	continue;
+
+      if ((obj->type == GXGEN_IS_WINDOW_OBJ
+	   && strcmp (field->name, "window") == 0)
+	  || (obj->type == GXGEN_IS_DRAWABLE_OBJ
+	      && strcmp (field->name, "drawable") == 0))
+	continue;
+
+      type = gxgen_definition_to_gx_type (field->definition, TRUE);
+
+      if (field->length)
+	{
+	  out (parts, obj->h_protos,
+	       ",\n\t\tconst %s *%s", type, field->name);
+	  out (parts, obj->c_funcs,
+	       ",\n\t\tconst %s *%s", type, field->name);
+	}
+      else if (field->definition->type == GXGEN_VALUEPARAM)
+	{
+	  out (parts, obj->h_protos,
+	       ",\n\t\tGXMaskValueItem *mask_value_items");
+	  out (parts, obj->c_funcs,
+	       ",\n\t\tGXMaskValueItem *mask_value_items");
+	  has_mask_value_items = TRUE;
+	}
+      else
+	{
+	  out (parts, obj->h_protos, ",\n\t\t%s %s", type, field->name);
+	  out (parts, obj->c_funcs, ",\n\t\t%s %s", type, field->name);
+	}
+    }
+  out (parts, obj->h_protos, ");\n\n");
+  out (parts, obj->c_funcs, ")\n{\n");
+
+  /*
+   * *_async() code
+   */
+  if (!obj->type == GXGEN_IS_CONNECTION_OBJ)
+    {
+      out (parts, obj->c_funcs,
+	   "\tGXConnection *connection = gx_%s_get_connection (%s);\n",
+	   obj->name, obj->name);
+    }
+
+  if (g_list_length (request->definition->reply_fields) <= 1)
+    out (parts, obj->c_funcs,
+	 "\txcb_void_cookie_t xcb_cookie;\n");
+  else
+    out (parts, obj->c_funcs,
+	 "\txcb_%s_cookie_t xcb_cookie;\n", xcb_name_lc);
+  out (parts, obj->c_funcs,
+	 "\tGXCookie *cookie;\n\n");
+
+  if (has_mask_value_items)
+    output_mask_value_variable_declarations (parts, obj->c_funcs);
+
+  out (parts, obj->c_funcs, "\n");
+
+  out (parts, obj->c_funcs,
+       "\txcb_cookie =\n"
+       "\t\txcb_%s(\n"
+       "\t\t\tgx_connection_get_xcb_connection (connection)", xcb_name_lc);
+
+  for (tmp = request->definition->fields; tmp != NULL;
+       tmp = tmp->next)
+    {
+      GXGenFieldDefinition *field = tmp->data;
+
+      if (strcmp (field->name, "opcode") == 0
+	  || strcmp (field->name, "pad") == 0
+	  || strcmp (field->name, "length") == 0)
+	continue;
+
+      if (field->definition->type != GXGEN_VALUEPARAM)
+	{
+	  /* Some special cased field types require a function call
+	   * to lookup their counterpart xcb value */
+	  out (parts, obj->c_funcs, ",\n\t\t\t");
+	  output_field_xcb_reference (parts, obj->c_funcs, field);
+	}
+      else
+	{
+	  out (parts, obj->c_funcs, ",\n\t\t\tvalue_mask");
+	  out (parts, obj->c_funcs, ",\n\t\t\tvalue_list");
+	}
+    }
+  out (parts, obj->c_funcs, ");\n\n");
+
+  obj_name_uc = gxgen_get_uppercase_name (obj->name);
+  gx_name_uc = gxgen_get_uppercase_name (out_request->gx_name);
+
+  if (!obj->type == GXGEN_IS_CONNECTION_OBJ)
+    cookie_type_uc =
+      g_strdup_printf ("GX_COOKIE_%s_%s", obj_name_uc, gx_name_uc);
+  else
+    cookie_type_uc =
+      g_strdup_printf ("GX_COOKIE_%s", gx_name_uc);
+
+  out (parts, GXGEN_PART_COOKIE_OBJ_H_TYPEDEFS,
+	"\t%s,\n", cookie_type_uc);
+
+  g_free (obj_name_uc);
+  g_free (gx_name_uc);
+
+
+  out (parts, obj->c_funcs,
+       "\tcookie = gx_cookie_new (connection, %s, xcb_cookie.sequence);\n",
+       cookie_type_uc);
+  /*
+  out (parts, obj->c_funcs,
+       "\tgx_connection_register_cookie (connection, cookie);\n");
+  */
+
+  g_free (cookie_type_uc);
+
+  if (!obj->type == GXGEN_IS_CONNECTION_OBJ)
+    out (parts, obj->c_funcs, "\tg_object_unref (connection);\n");
+
+#if 0
+  out (parts, obj->c_funcs,
+       "/* NB: normally developers dont need to manager cookie references\n"
+       "   since the GX API owns a reference until the cookie is expired\n"
+       "   upon recieving its corresponding reply */\n");
+  out (parts, obj->c_funcs, "\tg_object_ref (cookie);\n");
+#endif
+
+  out (parts, obj->c_funcs,
+       "\tgx_connection_register_cookie (connection, cookie);\n");
+
+  out (parts, obj->c_funcs, "\treturn cookie;\n");
+
+  out (parts, obj->c_funcs, "}\n");
+
+}
+
+void
+output_reply (GXGenState *state,
+	      GString **parts,
+	      OutputRequest *out_request)
+{
+  GXGenRequest *request = out_request->request;
+  GXGenOutputObject *obj = out_request->obj;
+  char *gx_name_lc =
+    gxgen_get_lowercase_name (out_request->gx_name);
+  char *xcb_name_lc =
+    gxgen_get_lowercase_name (out_request->xcb_name);
+  char *obj_name_uc = gxgen_get_uppercase_name (obj->name);
+
+  g_assert (g_list_length (request->definition->reply_fields) > 1);
+
+  out (parts, obj->c_funcs, "\nGX%sReply *\n",
+       out_request->gx_name);
+  out (parts, obj->h_protos, "\nGX%sReply *\n",
+       out_request->gx_name);
+
+  out (parts, obj->c_funcs,
+       "gx_%s_%s_reply (GXCookie *cookie, GError **error)\n",
+       obj->name, gx_name_lc);
+  out (parts, obj->h_protos,
+       "gx_%s_%s_reply (GXCookie *cookie, GError **error);\n",
+       obj->name, gx_name_lc);
+
+  out (parts, obj->c_funcs,
+       "{\n");
+
+  out (parts, obj->c_funcs,
+       "\tGXConnection *connection = gx_cookie_get_connection (cookie);\n");
+#if 0
+  if (!obj->type == GXGEN_IS_CONNECTION_OBJ)
+    {
+      out (parts, obj->c_funcs,
+	   "\tGXConnection *connection = gx_%s_get_connection (%s);\n",
+	   obj->name, obj->name);
+    }
+#endif
+
+#if 0
+  if (g_list_length (request->definition->reply_fields) <= 1)
+    out (parts, obj->c_funcs, "\txcb_void_cookie_t xcb_cookie;\n");
+  else
+    {
+#endif
+      out (parts, obj->c_funcs, "\txcb_%s_cookie_t xcb_cookie;\n",
+	   xcb_name_lc);
+      output_reply_variable_declarations (state, parts, out_request);
+#if 0
+    }
+#endif
+  out (parts, obj->c_funcs, "\n");
+
+  out (parts, obj->c_funcs,
+       "\tg_return_val_if_fail (error == NULL || *error == NULL, NULL);\n");
+
+  out (parts, obj->c_funcs, "\n");
+
+  out (parts, obj->c_funcs,
+       "\txcb_cookie.sequence = gx_cookie_get_sequence (cookie);\n");
+
+#if 0
+  if (g_list_length (request->definition->reply_fields) > 1)
+    out (parts, obj->c_funcs, "\t reply = ");
+  out (parts, obj->c_funcs, "\txcb_%s_reply (xcb_cookie);\n",
+       xcb_name_lc);
+#endif
+
+#if 0
+  out (parts, obj->c_funcs,
+       "\treply->x11_reply = (GX%sX11Reply *)\n"
+       "\t\txcb_%s_reply (\n"
+       "\t\t\tgx_connection_get_xcb_connection (connection),\n"
+       "\t\t\tcookie,\n" "\t\t\t&xcb_error);\n",
+       out_request->gx_name,
+       xcb_name_lc);
+#endif
+  out (parts, obj->c_funcs,
+       "\treply->x11_reply = (GX%sX11Reply *)\n"
+       "\t\tgx_cookie_get_reply (cookie);\n",
+       out_request->gx_name);
+
+  /* FIXME - we need a mechanism for translating X errors into a glib
+   * error domain, code and message. */
+  out (parts, obj->c_funcs,
+       "\tif (!reply->x11_reply)\n"
+       "\t  {\n"
+       "\t\t/* FIXME \n"
+       "\t\t * gx_error = gx_cookie_get_error (cookie);\n"
+       "\t\t * error = g_set_error (error, GX_CONNECTION,...)\n"
+       "\t\t */\n"
+       "\t  }\n");
+
+
+  if (!obj->type == GXGEN_IS_CONNECTION_OBJ)
+    out (parts, obj->c_funcs, "\tg_object_unref (connection);\n");
+
+#if 0
+#error "FIXME - remember to release the API reference if the connection"
+#error "gets finalised too!!!"
+
+  out (parts, obj->c_funcs,
+       "/* NB: The GX API internally manages a cookie reference that\n"
+       " * expires once the cookies corresponding reply has been recieved\n"
+       " */\n");
+  out (parts, obj->c_funcs, "\tg_object_unref (cookie);\n");
+#endif
+  out (parts, obj->c_funcs,
+       "\tgx_connection_unregister_cookie (connection, cookie);\n");
+
+#if 0
+  if (g_list_length (request->definition->reply_fields) <= 1)
+    out (parts, obj->c_funcs, "\treturn;\n");
+  else
+#endif
+    out (parts, obj->c_funcs, "\treturn reply;\n");
+
+  out (parts, obj->c_funcs,
+       "}\n");
+
+  g_free (gx_name_lc);
+  g_free (xcb_name_lc);
+  g_free (obj_name_uc);
+}
+
+void
+output_sync_request (GXGenState *state,
+		     GString **parts,
+		     OutputRequest *out_request)
+{
+  GXGenRequest *request = out_request->request;
+  GXGenOutputObject *obj = out_request->obj;
+  char *gx_name_lc =
+    gxgen_get_lowercase_name (out_request->gx_name);
+  char *xcb_name_lc =
+    gxgen_get_lowercase_name (out_request->xcb_name);
+  gboolean has_mask_value_items = FALSE;
+  GList *tmp;
+
+  if (g_list_length (request->definition->reply_fields) <= 1)
+    {
+      out (parts, obj->h_protos, "\ngboolean\n");
+      out (parts, obj->c_funcs, "\ngboolean\n");
+    }
+  else
+    {
+      out (parts, obj->h_protos, "\nGX%sReply *\n",
+	   out_request->gx_name);
+      out (parts, obj->c_funcs, "\nGX%sReply *\n",
+	   out_request->gx_name);
+    }
+
+  out (parts, obj->h_protos, "gx_%s_%s (%s",
+       obj->name, gx_name_lc, obj->first_arg);
+  out (parts, obj->c_funcs, "gx_%s_%s (%s",
+       obj->name, gx_name_lc, obj->first_arg);
+
+  for (tmp = request->definition->fields;
+       tmp != NULL; tmp = tmp->next)
+    {
+      GXGenFieldDefinition *field = tmp->data;
+      const char *type;
+
+      if (strcmp (field->name, "opcode") == 0
+	  || strcmp (field->name, "pad") == 0
+	  || strcmp (field->name, "length") == 0)
+	continue;
+
+      if (obj->first_object_field && field == obj->first_object_field)
+	continue;
+
+      type = gxgen_definition_to_gx_type (field->definition, TRUE);
+
+      if (field->length)
+	{
+	  out (parts, obj->h_protos,
+	       ",\n\t\tconst %s *%s", type, field->name);
+	  out (parts, obj->c_funcs,
+	       ",\n\t\tconst %s *%s", type, field->name);
+	}
+      else if (field->definition->type == GXGEN_VALUEPARAM)
+	{
+	  out (parts, obj->h_protos,
+	       ",\n\t\tGXMaskValueItem *mask_value_items");
+	  out (parts, obj->c_funcs,
+	       ",\n\t\tGXMaskValueItem *mask_value_items");
+	  has_mask_value_items = TRUE;
+	}
+      else
+	{
+	  out (parts, obj->h_protos, ",\n\t\t%s %s", type, field->name);
+	  out (parts, obj->c_funcs, ",\n\t\t%s %s", type, field->name);
+	}
+    }
+  out (parts, obj->h_protos, ",\n\t\tGError **error);\n\n");
+  out (parts, obj->c_funcs, ",\n\t\tGError **error)\n{\n");
+
+
+  if (!obj->type == GXGEN_IS_CONNECTION_OBJ)
+    {
+      out (parts, obj->c_funcs,
+	   "\tGXConnection *connection = gx_%s_get_connection (%s);\n",
+	   obj->name, obj->name);
+    }
+
+  if (g_list_length (request->definition->reply_fields) <= 1)
+    out (parts, obj->c_funcs, "\txcb_void_cookie_t cookie;\n");
+  else
+    {
+      out (parts, obj->c_funcs, "\txcb_%s_cookie_t cookie;\n", xcb_name_lc);
+      output_reply_variable_declarations (state, parts, out_request);
+    }
+
+  /* If the request has a GXGEN_VALUEPARAM field, then we will need
+   * to translate an array of GXMaskValueItems from the user.
+   */
+  if (has_mask_value_items)
+    output_mask_value_variable_declarations (parts, obj->c_funcs);
+
+  out (parts, obj->c_funcs, "\n");
+  if (g_list_length (request->definition->reply_fields) <= 1)
+    out (parts, obj->c_funcs,
+	 "\tg_return_val_if_fail (error == NULL || *error == NULL, FALSE);\n");
+  else
+    out (parts, obj->c_funcs,
+	 "\tg_return_val_if_fail (error == NULL || *error == NULL, NULL);\n");
+
+  if (g_list_length (request->definition->reply_fields) > 1)
+      out (parts, obj->c_funcs,
+	   "\treply->connection = connection;\n\n");
+
+  out (parts, obj->c_funcs,
+       "\tcookie =\n"
+       "\t\txcb_%s(\n"
+       "\t\t\tgx_connection_get_xcb_connection (connection)", xcb_name_lc);
+
+  for (tmp = request->definition->fields; tmp != NULL;
+       tmp = tmp->next)
+    {
+      GXGenFieldDefinition *field = tmp->data;
+
+      if (strcmp (field->name, "opcode") == 0
+	  || strcmp (field->name, "pad") == 0
+	  || strcmp (field->name, "length") == 0)
+	continue;
+
+      if (field->definition->type != GXGEN_VALUEPARAM)
+	{
+	  /* Some special cased field types require a function call
+	   * to lookup their counterpart xcb value */
+	  out (parts, obj->c_funcs, ",\n\t\t\t");
+	  output_field_xcb_reference (parts, obj->c_funcs, field);
+	}
+      else
+	{
+	  out (parts, obj->c_funcs, ",\n\t\t\tvalue_mask");
+	  out (parts, obj->c_funcs, ",\n\t\t\tvalue_list");
+	}
+    }
+  out (parts, obj->c_funcs, ");\n\n");
+
+  if (g_list_length (request->definition->reply_fields) > 1)
+    {
+      out (parts, obj->c_funcs,
+	   "\treply->x11_reply = (GX%sX11Reply *)\n"
+	   "\t\txcb_%s_reply (\n"
+	   "\t\t\tgx_connection_get_xcb_connection (connection),\n"
+	   "\t\t\tcookie,\n" "\t\t\t&xcb_error);\n",
+	   out_request->gx_name,
+	   xcb_name_lc);
+    }
+
+  if (!obj->type == GXGEN_IS_CONNECTION_OBJ)
+    out (parts, obj->c_funcs, "\tg_object_unref (connection);\n");
+
+  if (g_list_length (request->definition->reply_fields) <= 1)
+    out (parts, obj->c_funcs, "\n\treturn TRUE;\n");
+  else
+    out (parts, obj->c_funcs, "\n\treturn reply;\n");
+
+  out (parts, obj->c_funcs, "}\n\n");
+
+  g_free (gx_name_lc);
+  g_free (xcb_name_lc);
+
 }
 
 static void
@@ -1693,14 +2236,15 @@ output_requests (GXGenState * state,
 {
   GList *tmp;
 
+  out (parts, GXGEN_PART_COOKIE_OBJ_H_TYPEDEFS,
+       "typedef enum _GXCookieType\n{\n");
+
   for (tmp = extension->requests; tmp != NULL; tmp = tmp->next)
     {
       GXGenRequest *request = tmp->data;
+      OutputRequest *out_request;
       GXGenOutputObject *obj = NULL;
-      GList *tmp2;
-      char *name_lc;
-      GString *scratch;
-      gboolean has_mask_value_items = FALSE;
+      gchar *gx_name;
 
       /* Some constructor type requests are special cased as object
        * constructors */
@@ -1711,266 +2255,52 @@ output_requests (GXGenState * state,
 
       obj = identify_request_object (request);
 
-      name_lc = gxgen_get_lowercase_name (request->definition->name);
+      /* the get/set_property names clash with the gobject
+       * property accessor functions */
+      if (strcmp (request->definition->name, "GetProperty") == 0)
+	gx_name = g_strdup ("GetXProperty");
+      else if (strcmp (request->definition->name, "SetProperty") == 0)
+	gx_name = g_strdup ("SetXProperty");
+      else
+	gx_name = g_strdup (request->definition->name);
+
+      out_request = g_new0 (OutputRequest, 1);
+      out_request->extension = extension;
+      out_request->request = request;
+      out_request->obj = obj;
+      out_request->xcb_name = g_strdup (request->definition->name);
+      out_request->gx_name = gx_name;
 
       /* If the request has a reply definition then we typedef
        * the reply struct.
        */
-      output_reply_typedef (state, extension, parts, request, obj);
+      output_reply_typedef (state, parts, out_request);
 
       /* Some replys include a list of data. If this is such a request
        * then we output a getter function for trailing list fields */
-      output_reply_list_get (state, extension, parts, request, obj);
-      output_reply_list_free (state, extension, parts, request, obj);
+      output_reply_list_get (state, parts, out_request);
+      output_reply_list_free (state, parts, out_request);
 
-      output_reply_free (state, extension, parts, request, obj);
+      output_reply_free (state, parts, out_request);
 
-      /* the get/set_property names clash with the gobject
-       * property accessor functions */
-      if (strcmp (name_lc, "get_property") == 0)
-	out (parts, obj->h_protos, "GXCookie *\ngx_%s_get_xproperty_async(%s",
-	     obj->name, obj->first_arg);
-      else if (strcmp (name_lc, "set_property") == 0)
-	out (parts, obj->h_protos, "GXCookie *\ngx_%s_set_xproperty_async(%s",
-	     obj->name, obj->first_arg);
-      else
-	out (parts, obj->h_protos, "GXCookie *\ngx_%s_%s_async(%s",
-	     obj->name, name_lc, obj->first_arg);
-
-      for (tmp2 = request->definition->fields; tmp2 != NULL; tmp2 = tmp2->next)
-	{
-	  GXGenFieldDefinition *field = tmp2->data;
-	  const char *type;
-
-	  if (strcmp (field->name, "opcode") == 0
-	      || strcmp (field->name, "pad") == 0
-	      || strcmp (field->name, "length") == 0)
-	    continue;
-
-	  if (obj->first_object_field && field == obj->first_object_field)
-	    continue;
-
-	  if ((obj->type == GXGEN_IS_WINDOW_OBJ
-	       && strcmp (field->name, "window") == 0)
-	      || (obj->type == GXGEN_IS_DRAWABLE_OBJ
-		  && strcmp (field->name, "drawable") == 0))
-	    continue;
-
-	  type = gxgen_definition_to_gx_type (field->definition, TRUE);
-
-	  if (field->length)
-	    out (parts, obj->h_protos,
-		 ",\n\t\tconst %s *%s", type, field->name);
-	  else if (field->definition->type == GXGEN_VALUEPARAM)
-	    {
-	      out (parts, obj->h_protos,
-		   ",\n\t\tGXMaskValueItem *mask_value_items");
-	      has_mask_value_items = TRUE;
-#if 0
-	      const char *valueparam_type =
-		gxgen_definition_to_gx_type (field->definition->reference, FALSE);
-	      out (parts, obj->h_protos, ",\n\t\t%s %s", valueparam_type,
-		   field->definition->mask_name);
-	      out (parts, obj->h_protos, ",\n\t\tconst guint32 *%s",
-		   field->definition->list_name);
-#endif
-	    }
-	  else
-	    out (parts, obj->h_protos, ",\n\t\t%s %s", type, field->name);
-	}
-      out (parts, obj->h_protos, ");\n\n");
-
-
-      scratch = g_string_new ("");
-      if (!request->definition->reply_fields
-	  || g_list_length (request->definition->reply_fields) == 1)
-	g_string_append (scratch, "void\n");
-      else
-	g_string_append_printf (scratch, "GX%sReply *\n",
-				request->definition->name);
-
-
-      /* the get/set_property names clash with the gobject
-       * property accessor functions */
-      if (strcmp (name_lc, "get_property") == 0)
-	g_string_append_printf (scratch, "gx_%s_get_xproperty(%s",
-				obj->name, obj->first_arg);
-      else if (strcmp (name_lc, "set_property") == 0)
-	g_string_append_printf (scratch, "gx_%s_set_xproperty(%s",
-				obj->name, obj->first_arg);
-      else
-	g_string_append_printf (scratch, "gx_%s_%s(%s",
-				obj->name, name_lc, obj->first_arg);
-
-      out (parts, obj->h_protos, "%s", scratch->str);
-      out (parts, obj->c_funcs, "%s", scratch->str);
-      //g_free (name_lc);
-      g_string_free (scratch, TRUE);
-
-
-      for (tmp2 = request->definition->fields;
-	   tmp2 != NULL; tmp2 = tmp2->next)
-	{
-	  GXGenFieldDefinition *field = tmp2->data;
-	  const char *type;
-
-	  if (strcmp (field->name, "opcode") == 0
-	      || strcmp (field->name, "pad") == 0
-	      || strcmp (field->name, "length") == 0)
-	    continue;
-
-	  if (obj->first_object_field && field == obj->first_object_field)
-	    continue;
-
-	  type = gxgen_definition_to_gx_type (field->definition, TRUE);
-
-	  if (field->length)
-	    {
-	      out (parts, obj->h_protos, ",\n\t\tconst %s *%s", type, field->name);
-	      out (parts, obj->c_funcs, ",\n\t\tconst %s *%s", type, field->name);
-	    }
-	  else if (field->definition->type == GXGEN_VALUEPARAM)
-	    {
-	      out (parts, obj->h_protos,
-		   ",\n\t\tGXMaskValueItem *mask_value_items");
-	      out (parts, obj->c_funcs,
-		   ",\n\t\tGXMaskValueItem *mask_value_items");
-	      has_mask_value_items = TRUE;
-#if 0
-	      const char *valueparam_type =
-		gxgen_definition_to_gx_type (field->definition->reference, FALSE);
-
-	      out (parts, obj->h_protos, ",\n\t\t%s %s", valueparam_type,
-		   field->definition->mask_name);
-	      out (parts, obj->h_protos, ",\n\t\t%s *%s", valueparam_type,
-		   field->definition->list_name);
-	      out (parts, obj->c_funcs, ",\n\t\t%s %s", valueparam_type,
-		   field->definition->mask_name);
-	      out (parts, obj->c_funcs, ",\n\t\t%s *%s", valueparam_type,
-		   field->definition->list_name);
-#endif
-	    }
-	  else
-	    {
-	      out (parts, obj->h_protos, ",\n\t\t%s %s", type, field->name);
-	      out (parts, obj->c_funcs, ",\n\t\t%s %s", type, field->name);
-	    }
-	}
-      out (parts, obj->h_protos, ");\n\n");
-      out (parts, obj->c_funcs, ")\n{\n");
-
-      //name_lc = gxgen_get_lowercase_name (request->definition->name);
-
-      if (!obj->type == GXGEN_IS_CONNECTION_OBJ)
-	{
-	  out (parts, obj->c_funcs,
-	       "\n\tGXConnection *connection = gx_%s_get_connection (%s);\n",
-	       obj->name, obj->name);
-	}
-
-      if (g_list_length (request->definition->reply_fields) <= 1)
-	{
-	  out (parts, obj->c_funcs, "\txcb_void_cookie_t cookie;\n");
-	}
-      else
-	{
-	  out (parts, obj->c_funcs,
-	       "\txcb_generic_error_t *xcb_error;\n", name_lc);
-	  out (parts, obj->c_funcs, "\txcb_%s_cookie_t cookie;\n", name_lc);
-	  out (parts, obj->c_funcs,
-	       "\tGX%sReply *reply = g_slice_new (GX%sReply);\n",
-	       request->definition->name,
-	       request->definition->name);
-	}
-
-      /* If the request has a GXGEN_VALUEPARAM field, then we will need
-       * to translate an array of GXMaskValueItems from the user.
-       */
-      if (has_mask_value_items)
-	{
-	  out (parts, obj->c_funcs,
-	       "\tguint32 value_list_len = "
-		  "gx_mask_value_items_get_count (mask_value_items);\n");
-	  out (parts, obj->c_funcs,
-	       "\tguint32 *value_list = "
-		  "alloca (value_list_len * 4);\n");
-	  out (parts, obj->c_funcs,
-		"\tguint32 value_mask;\n");
-	  out (parts, obj->c_funcs,
-		"\n");
-
-	  out (parts, obj->c_funcs,
-	       "\tgx_mask_value_items_get_list (mask_value_items, "
-		  "&value_mask, value_list);\n");
-	}
-
-      out (parts, obj->c_funcs, "\n");
-
-      if (g_list_length (request->definition->reply_fields) > 1)
-	  out (parts, obj->c_funcs,
-	       "\treply->connection = connection;\n\n");
-
-      out (parts, obj->c_funcs,
-	   "\tcookie =\n"
-	   "\t\txcb_%s(\n"
-	   "\t\t\tgx_connection_get_xcb_connection (connection)", name_lc);
-
-      for (tmp2 = request->definition->fields; tmp2 != NULL;
-	   tmp2 = tmp2->next)
-	{
-	  GXGenFieldDefinition *field = tmp2->data;
-
-	  if (strcmp (field->name, "opcode") == 0
-	      || strcmp (field->name, "pad") == 0
-	      || strcmp (field->name, "length") == 0)
-	    continue;
-
-	  if (field->definition->type != GXGEN_VALUEPARAM)
-	    {
-	      /* Some special cased field types require a function call
-	       * to lookup their counterpart xcb value */
-	      out (parts, obj->c_funcs, ",\n\t\t\t");
-	      output_field_xcb_reference (parts, obj->c_funcs, field);
-	    }
-	  else
-	    {
-	      out (parts, obj->c_funcs, ",\n\t\t\tvalue_mask");
-	      out (parts, obj->c_funcs, ",\n\t\t\tvalue_list");
-#if 0
-	      //const char *valueparam_type =
-		//gxgen_definition_to_gx_type (field->definition->reference, FALSE);
-	      out (parts, obj->c_funcs, ",\n\t\t\t%s",
-		   field->definition->mask_name);
-	      out (parts, obj->c_funcs, ",\n\t\t\t%s",
-		   field->definition->list_name);
-#endif
-	    }
-	}
-      out (parts, obj->c_funcs, ");\n\n");
-
+      /* All requests that have a reply may be issued asynchronously such
+       * that the user gets a cookie back for the request and can
+       * demand the result at the last moment */
       if (g_list_length (request->definition->reply_fields) > 1)
 	{
-	  out (parts, obj->c_funcs,
-	       "\treply->x11_reply = (GX%sX11Reply *)\n"
-	       "\t\txcb_%s_reply (\n"
-	       "\t\t\tgx_connection_get_xcb_connection (connection),\n"
-	       "\t\t\tcookie,\n" "\t\t\t&xcb_error);\n",
-	       request->definition->name,
-	       name_lc);
+	  output_async_request (state, parts, out_request);
+	  output_reply (state, parts, out_request);
 	}
 
-      if (!obj->type == GXGEN_IS_CONNECTION_OBJ)
-	out (parts, obj->c_funcs, "\tg_object_unref (connection);\n");
+      output_sync_request (state, parts, out_request);
 
-      if (g_list_length (request->definition->reply_fields) > 1)
-	{
-	  out (parts, obj->c_funcs, "\n\treturn reply;\n");
-	}
-      out (parts, obj->c_funcs, "}\n\n");
-
-      g_free (name_lc);
+      g_free (out_request->xcb_name);
+      g_free (out_request->gx_name);
+      g_free (out_request);
     }
 
+  out (parts, GXGEN_PART_COOKIE_OBJ_H_TYPEDEFS,
+       "} GXCookieType;\n");
 }
 
 static void
@@ -2039,6 +2369,7 @@ output_all_gx_code (GXGenState * state)
   FILE *window_code;
   FILE *gcontext_header;
   FILE *gcontext_code;
+  FILE *cookie_header;
   GString *parts[GXGEN_PART_COUNT];
   int i;
   GList *tmp;
@@ -2237,6 +2568,20 @@ output_all_gx_code (GXGenState * state)
 
   fclose (gcontext_header);
   fclose (gcontext_code);
+
+
+  cookie_header = fopen ("gx-cookie-gen.h", "w");
+  if (!cookie_header)
+    {
+      perror ("Failed to open header file");
+      return;
+    }
+
+  /* typedefs */
+  fwrite (parts[GXGEN_PART_COOKIE_OBJ_H_TYPEDEFS]->str, 1,
+	  parts[GXGEN_PART_COOKIE_OBJ_H_TYPEDEFS]->len, cookie_header);
+
+  fclose (cookie_header);
 
 
   for (i = 0; i < GXGEN_PART_COUNT; i++)

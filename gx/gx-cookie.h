@@ -2,8 +2,7 @@
  * vim: tabstop=8 shiftwidth=2 noexpandtab softtabstop=2 cinoptions=>2,{2,:0,t0,(0,W4
  *
  * <preamble>
- * gswat - A graphical program debugger for Gnome
- * Copyright (C) 2006  Robert Bragg
+ * Copyright (C) 2008  Robert Bragg
  * </preamble>
  *
  * <license>
@@ -29,7 +28,9 @@
 
 #include <glib.h>
 #include <glib-object.h>
-/* include your parent object here */
+
+#include <gx/gx-connection.h>
+#include <gx/gx-types.h>
 
 G_BEGIN_DECLS
 
@@ -40,16 +41,16 @@ G_BEGIN_DECLS
 #define GX_IS_COOKIE_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GX_TYPE_COOKIE))
 #define GX_COOKIE_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GX_TYPE_COOKIE, GXCookieClass))
 
-typedef struct _GXCookie	GXCookie;
+#if !defined (GX_COOKIE_TYPEDEF)
+typedef struct _GXCookie GXCookie;
+#define GX_COOKIE_TYPEDEF
+#endif
 typedef struct _GXCookieClass	GXCookieClass;
 typedef struct _GXCookiePrivate GXCookiePrivate;
 
 struct _GXCookie
 {
-  /* add your parent type here */
-  GObject parent;
-
-  /* add pointers to new members here */
+  GInitiallyUnowned parent;
 
   /*< private > */
   GXCookiePrivate *priv;
@@ -57,17 +58,47 @@ struct _GXCookie
 
 struct _GXCookieClass
 {
-  /* add your parent class here */
-  GObjectClass parent_class;
+  GInitiallyUnownedClass parent_class;
 
-  /* add signals here */
-  /* void (* signal) (GXCookie *object); */
+  /* Signals */
+  void (* reply) (GXCookie *cookie);
+  void (* error) (GXCookie *cookie);
 };
+
+/* To handle circular dependency between the gx-connection and gx-cookie
+ * headers */
+#if !defined (GX_CONNECTION_TYPEDEF)
+typedef struct _GXConnection GXConnection;
+#define GX_CONNECTION_TYPEDEF
+#endif
 
 GType gx_cookie_get_type(void);
 
-/* add additional methods here */
-GXCookie *gx_cookie_new(void);
+#include "gx-cookie-gen.h"
+
+GXCookie *gx_cookie_new (GXConnection *connection,
+			 GXCookieType type,
+			 unsigned int sequence);
+
+GXConnection *gx_cookie_get_connection (GXCookie *self);
+
+GXCookieType gx_cookie_get_cookie_type (GXCookie *self);
+
+unsigned int gx_cookie_get_sequence (GXCookie *self);
+
+
+GXGenericReply *
+gx_cookie_get_reply (GXCookie *self);
+
+void
+gx_cookie_set_reply (GXCookie *self, xcb_generic_reply_t *reply);
+
+
+GXGenericError *
+gx_cookie_get_error (GXCookie *self);
+
+void
+gx_cookie_set_error (GXCookie *self, xcb_generic_error_t *error);
 
 G_END_DECLS
 

@@ -49,7 +49,9 @@ libgx_@GX_MAJOR_VERSION@_@GX_MINOR_VERSION@_la_SOURCES = \
 	gx-gcontext.c \
 	gx-gcontext.h \
 	gx-screen.c \
-	gx-screen.h
+	gx-screen.h \
+	gx-cookie.c \
+	gx-cookie.h
 
 #libgx_@GX_MAJOR_VERSION@_@GX_MINOR_VERSION@_la_LDADD =
 libgx_@GX_MAJOR_VERSION@_@GX_MINOR_VERSION@_la_LDFLAGS = \

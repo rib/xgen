@@ -1,10 +1,7 @@
 /*
  * vim: tabstop=8 shiftwidth=2 noexpandtab softtabstop=2 cinoptions=>2,{2,:0,t0,(0,W4
  *
- * <preamble>
- * gswat - A graphical program debugger for Gnome
- * Copyright (C) 2006  Robert Bragg
- * </preamble>
+ * Copyright (C) 2008  Robert Bragg
  *
  * <license>
  * This program is free software; you can redistribute it and/or
@@ -19,18 +16,19 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ * MA  02110-1301, USA.
  * </license>
  *
  */
 
+#include <glib.h>
+
 #include <gx/gx-cookie.h>
 
-/* Macros and defines */
-#define GX_COOKIE_GET_PRIVATE(object)(G_TYPE_INSTANCE_GET_PRIVATE ((object), GX_TYPE_COOKIE, GXCookiePrivate))
+#define GX_COOKIE_GET_PRIVATE(object) \
+  (G_TYPE_INSTANCE_GET_PRIVATE ((object), GX_TYPE_COOKIE, GXCookiePrivate))
 
-/* Enums/Typedefs */
-/* add your signals here */
 #if 0
 enum {
     SIGNAL_NAME,
@@ -38,42 +36,52 @@ enum {
 };
 #endif
 
-#if 0
 enum {
-    PROP_0,
-    PROP_NAME,
+  PROP_0,
+  PROP_CONNECTION,
+  PROP_COOKIE_TYPE,
+  PROP_SEQUENCE,
+  PROP_REPLY,
+  PROP_ERROR
 };
-#endif
 
 struct _GXCookiePrivate
 {
-#error template_fixme
+  GXCookieType	 type;
+  GXConnection	*connection;
+  unsigned int	 sequence;
+
+  xcb_generic_reply_t *reply;
+  xcb_generic_error_t *error;
 };
 
 
-/* Function definitions */
-static void gx_cookie_class_init(GXCookieClass *klass);
-static void gx_cookie_get_property(GObject *object,
-				   guint id,
-				   GValue *value,
-				   GParamSpec *pspec);
-static void gx_cookie_set_property(GObject *object,
-				   guint property_id,
-				   const GValue *value,
-				   GParamSpec *pspec);
+static void gx_cookie_class_init (GXCookieClass *klass);
+static void gx_cookie_get_property (GObject *object,
+				    guint id,
+				    GValue *value,
+				    GParamSpec *pspec);
+static void gx_cookie_set_property (GObject *object,
+				    guint property_id,
+				    const GValue *value,
+				    GParamSpec *pspec);
 /* static void gx_cookie_mydoable_interface_init(gpointer interface,
    gpointer data); */
-static void gx_cookie_init(GXCookie *self);
-static void gx_cookie_finalize(GObject *self);
+static void gx_cookie_init (GXCookie *self);
+static void gx_cookie_finalize (GObject *self);
 
 
-/* Variables */
-static GObjectClass *parent_class = NULL;
-#error template_fixme
+#if 0
+static GInitiallyUnownedClass *parent_class = NULL;
 /* static guint gx_cookie_signals[LAST_SIGNAL] = { 0 }; */
+#endif
 
+/* NB: This declares gx_cookie_parent_class */
+G_DEFINE_TYPE (GXCookie, gx_cookie, G_TYPE_INITIALLY_UNOWNED);
+
+#if 0
 GType
-gx_cookie_get_type(void) /* Typechecking */
+gx_cookie_get_type (void)
 {
   static GType self_type = 0;
 
@@ -94,8 +102,7 @@ gx_cookie_get_type(void) /* Typechecking */
 	};
 
       /* add the type of your parent class here */
-#error template_fixme
-      self_type = g_type_register_static(G_TYPE_OBJECT, /* parent GType */
+      self_type = g_type_register_static(G_TYPE_INITIALLY_UNOWNED,
 					 "GXCookie", /* type name */
 					 &object_info, /* type info */
 					 0 /* flags */
@@ -120,109 +127,174 @@ gx_cookie_get_type(void) /* Typechecking */
 
   return self_type;
 }
+#endif
 
 static void
-gx_cookie_class_init(GXCookieClass *klass) /* Class Initialization */
+gx_cookie_class_init (GXCookieClass *klass) /* Class Initialization */
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS(klass);
-  /* GParamSpec *new_param;*/
+  GParamSpec *new_param;
 
+#if 0
   parent_class = g_type_class_peek_parent(klass);
+#endif
 
   gobject_class->finalize = gx_cookie_finalize;
 
   gobject_class->get_property = gx_cookie_get_property;
   gobject_class->set_property = gx_cookie_set_property;
 
-  /* set up properties */
-#if 0
-  //new_param = g_param_spec_int("name", /* name */
-  //new_param = g_param_spec_uint("name", /* name */
-  //new_param = g_param_spec_boolean("name", /* name */
-  //new_param = g_param_spec_object("name", /* name */
-  new_param = g_param_spec_pointer("name", /* name */
-				   "Name", /* nick name */
-				   "Name", /* description */
-#if INT/UINT/CHAR/LONG/FLOAT...
-				   10, /* minimum */
-				   100, /* maximum */
-				   0, /* default */
-#elif BOOLEAN
-				   FALSE, /* default */
-#elif STRING
-				   NULL, /* default */
-#elif OBJECT
-				   MY_TYPE_PARAM_OBJ, /* GType */
-#elif POINTER
-				   /* nothing extra */
-#endif
-				   MY_PARAM_READABLE /* flags */
-				   MY_PARAM_WRITEABLE /* flags */
-				   MY_PARAM_READWRITE /* flags */
-				   | G_PARAM_CONSTRUCT
-				   | G_PARAM_CONSTRUCT_ONLY
-				   );
-  g_object_class_install_property(gobject_class,
-				  PROP_NAME,
-				  new_param);
-#endif
+  new_param = g_param_spec_int ("cookie-type", /* name */
+				"Cookie Type", /* nick name */
+				"The type of cookie ", /* description */
+				0, /* minimum */
+				G_MAXINT, /* maximum */
+				0, /* default */
+				G_PARAM_CONSTRUCT_ONLY
+				| G_PARAM_WRITABLE
+				| G_PARAM_READABLE
+				);
+  g_object_class_install_property (gobject_class,
+				   PROP_COOKIE_TYPE,
+				   new_param);
 
-  /* set up signals */
-#if 0 /* template code */
-  klass->signal_member = signal_default_handler;
-  gx_cookie_signals[SIGNAL_NAME] =
-    g_signal_new("signal_name", /* name */
-		 G_TYPE_FROM_CLASS(klass), /* interface GType */
-		 G_SIGNAL_RUN_LAST, /* signal flags */
-		 G_STRUCT_OFFSET(GXCookieClass, signal_member),
-		 NULL, /* accumulator */
-		 NULL, /* accumulator data */
-		 g_cclosure_marshal_VOID__VOID, /* c marshaller */
-		 G_TYPE_NONE, /* return type */
-		 0 /* number of parameters */
-		 /* vararg, list of param types */
+  new_param = g_param_spec_uint ("sequence", /* name */
+				 "Sequence", /* nick name */
+				 "The sequence number of the corresponding "
+				 "request", /* description */
+				 0, /* minimum */
+				 G_MAXUINT, /* maximum */
+				 0, /* default */
+				 G_PARAM_CONSTRUCT_ONLY
+				 | G_PARAM_WRITABLE
+				 | G_PARAM_READABLE
+				 );
+  g_object_class_install_property (gobject_class,
+				   PROP_SEQUENCE,
+				   new_param);
+
+  new_param = g_param_spec_object ("connection", /* name */
+				   "Connection", /* nick name */
+				   "The connection this cookie is associated "
+				   "with", /* description */
+				   GX_TYPE_CONNECTION,
+				   G_PARAM_CONSTRUCT_ONLY
+				   | G_PARAM_WRITABLE
+				   | G_PARAM_READABLE
+				   );
+  g_object_class_install_property (gobject_class,
+				   PROP_CONNECTION,
+				   new_param);
+
+  new_param = g_param_spec_pointer ("reply", /* name */
+				    "Reply", /* nick name */
+				    "The xcb_*_rely_t for this cookie's request",
+				    G_PARAM_WRITABLE
+				    | G_PARAM_READABLE
+				    );
+  g_object_class_install_property (gobject_class,
+				   PROP_REPLY,
+				   new_param);
+
+  new_param = g_param_spec_pointer ("error", /* name */
+				    "Error", /* nick name */
+				    "Any xcb_*_error_t for this cookie's request",
+				    G_PARAM_WRITABLE
+				    | G_PARAM_READABLE
+				    );
+  g_object_class_install_property (gobject_class,
+				   PROP_ERROR,
+				   new_param);
+
+  /* Signals */
+#if 0
+  klass->reply = NULL;
+  gx_connection_signals[REPLY_SIGNAL] =
+    g_signal_new ("reply", /* name */
+		  G_TYPE_FROM_CLASS (klass), /* interface GType */
+		  G_SIGNAL_RUN_LAST, /* signal flags */
+		  G_STRUCT_OFFSET (GXConnectionClass, reply),
+		  NULL, /* accumulator */
+		  NULL,	/* accumulator data */
+		  g_cclosure_marshal_VOID__VOID, /* c marshaller */
+		  G_TYPE_NONE,	/* return type */
+		  0 /* number of parameters */
+		  /* vararg, list of param types */
+    );
+  klass->error = NULL;
+  gx_connection_signals[ERROR_SIGNAL] =
+    g_signal_new ("error", /* name */
+		  G_TYPE_FROM_CLASS (klass), /* interface GType */
+		  G_SIGNAL_RUN_LAST, /* signal flags */
+		  G_STRUCT_OFFSET (GXConnectionClass, error),
+		  NULL, /* accumulator */
+		  NULL,	/* accumulator data */
+		  g_cclosure_marshal_VOID__VOID, /* c marshaller */
+		  G_TYPE_NONE,	/* return type */
+		  0 /* number of parameters */
+		  /* vararg, list of param types */
     );
 #endif
 
-  g_type_class_add_private(klass, sizeof(GXCookiePrivate));
+  g_type_class_add_private (klass, sizeof (GXCookiePrivate));
 }
 
 static void
-gx_cookie_get_property(GObject *object,
-		       guint id,
-		       GValue *value,
-		       GParamSpec *pspec)
+gx_cookie_get_property (GObject *object,
+		        guint id,
+		        GValue *value,
+		        GParamSpec *pspec)
 {
-  /* GXCookie* self = GX_COOKIE(object); */
+  GXCookie* self = GX_COOKIE (object);
 
-  switch(id)
+  switch (id)
     {
 #if 0 /* template code */
     case PROP_NAME:
-      g_value_set_int(value, self->priv->property);
-      g_value_set_uint(value, self->priv->property);
-      g_value_set_boolean(value, self->priv->property);
+      g_value_set_int (value, self->priv->property);
+      g_value_set_uint (value, self->priv->property);
+      g_value_set_boolean (value, self->priv->property);
       /* don't forget that this will dup the string for you: */
-      g_value_set_string(value, self->priv->property);
-      g_value_set_object(value, self->priv->property);
-      g_value_set_pointer(value, self->priv->property);
+      g_value_set_string (value, self->priv->property);
+      g_value_set_object (value, self->priv->property);
+      g_value_set_pointer (value, self->priv->property);
       break;
 #endif
+    case PROP_CONNECTION:
+      g_value_set_object (value, self->priv->connection);
+      break;
+    case PROP_COOKIE_TYPE:
+      g_value_set_int (value, self->priv->type);
+      break;
+    case PROP_SEQUENCE:
+      g_value_set_uint (value, self->priv->sequence);
+      break;
     default:
-      G_OBJECT_WARN_INVALID_PROPERTY_ID(object, id, pspec);
+      G_OBJECT_WARN_INVALID_PROPERTY_ID (object, id, pspec);
       break;
     }
 }
 
+#if 0
 static void
-gx_cookie_set_property(GObject *object,
-		       guint property_id,
-		       const GValue *value,
-		       GParamSpec *pspec)
+connection_finalize_notify (gpointer data,
+                            GObject *where_the_object_was)
 {
-  /* GXCookie* self = GX_COOKIE(object); */
+  GXCookie *self = GX_COOKIE (data);
 
-  switch(property_id)
+  self->priv->connection = NULL;
+}
+#endif
+
+static void
+gx_cookie_set_property (GObject *object,
+		        guint property_id,
+		        const GValue *value,
+		        GParamSpec *pspec)
+{
+  GXCookie* self = GX_COOKIE (object);
+
+  switch (property_id)
     {
 #if 0 /* template code */
     case PROP_NAME:
@@ -234,6 +306,22 @@ gx_cookie_set_property(GObject *object,
       gx_cookie_set_property(self, g_value_get_pointer(value));
       break;
 #endif
+    case PROP_CONNECTION:
+      self->priv->connection = g_value_get_object(value);
+      g_object_add_weak_pointer (G_OBJECT (self->priv->connection),
+				 &self->priv->connection);
+#if 0
+      g_object_weak_ref (self->priv->connection,
+			 connection_finalized_notify,
+			 self);
+#endif
+      break;
+    case PROP_COOKIE_TYPE:
+      self->priv->type = g_value_get_int (value);
+      break;
+    case PROP_SEQUENCE:
+      self->priv->sequence = g_value_get_uint (value);
+      break;
     default:
       g_warning("gx_cookie_set_property on unknown property");
       return;
@@ -257,47 +345,38 @@ gx_cookie_mydoable_interface_init(gpointer interface,
 
 /* Instance Construction */
 static void
-gx_cookie_init(GXCookie *self)
+gx_cookie_init (GXCookie *self)
 {
-  self->priv = GX_COOKIE_GET_PRIVATE(self);
+  self->priv = GX_COOKIE_GET_PRIVATE (self);
   /* populate your object here */
 }
 
 /* Instantiation wrapper */
-GXCookie*
-gx_cookie_new(void)
+GXCookie *
+gx_cookie_new (GXConnection *connection,
+	       GXCookieType type,
+	       unsigned int sequence)
 {
-  return GX_COOKIE(g_object_new(gx_cookie_get_type(), NULL));
+  return GX_COOKIE (g_object_new (gx_cookie_get_type (),
+				  "connection", connection,
+				  "type", type,
+				  "sequence", sequence,
+				  NULL));
 }
 
 /* Instance Destruction */
 void
-gx_cookie_finalize(GObject *object)
+gx_cookie_finalize (GObject *object)
 {
   /* GXCookie *self = GX_COOKIE(object); */
 
   /* destruct your object here */
-  G_OBJECT_CLASS(parent_class)->finalize(object);
+  G_OBJECT_CLASS (gx_cookie_parent_class)->finalize (object);
 }
 
 
 
 /* add new methods here */
-
-/**
- * function_name:
- * @par1:  description of parameter 1. These can extend over more than
- * one line.
- * @par2:  description of parameter 2
- *
- * The function description goes here.
- *
- * Returns: an integer.
- */
-#if 0
-For more gtk-doc notes, see:
-http://developer.gnome.org/arch/doc/authors.html
-#endif
 
 
 #if 0 /* getter/setter templates */
@@ -346,4 +425,92 @@ gx_cookie_set_PROPERTY(GXCookie *self, PropType PROPERTY)
       }
 }
 #endif
+
+GXCookieType
+gx_cookie_get_cookie_type (GXCookie *self)
+{
+  return self->priv->type;
+}
+
+unsigned int
+gx_cookie_get_sequence (GXCookie *self)
+{
+  return self->priv->sequence;
+}
+
+/**
+ * gx_cookie_get_connection:
+ * @self: a cookie
+ *
+ * This function returns a pointer to the connection object that the
+ * passed cookie is associated with.
+ *
+ * Note: that the cookie itself doesn't own a reference on the connection
+ * object it just maintains a weak pointer. This function doesn't ref the
+ * connection object before returning it to you, so it is your responsability
+ * to ref it, or setup another weak pointer.
+ */
+GXConnection *
+gx_cookie_get_connection (GXCookie *self)
+{
+  return self->priv->connection;
+}
+
+/**
+ * gx_cookie_set_reply:
+ * @self: a cookie
+ *
+ * This function manually sets a xcb_*_reply_t pointer that will be used
+ * when requesting the reply for the cookie. Normally you wouldn't use this
+ * directly, since the connection object can asynchronously set the reply
+ * data as soon as the data is available from the server.
+ */
+void
+gx_cookie_set_reply (GXCookie *self, xcb_generic_reply_t *reply)
+{
+  self->priv->reply = reply;
+  g_object_notify (G_OBJECT (self), "reply");
+}
+
+/**
+ * gx_cookie_get_reply:
+ * @self: a cookie
+ *
+ * If a reply has been recieved for this cookie then a pointer to the
+ * corresponding xcb_*reply_t is returned, else NULL.
+ */
+GXGenericReply *
+gx_cookie_get_reply (GXCookie *self)
+{
+  return self->priv->reply;
+}
+
+/**
+ * gx_cookie_set_error:
+ * @self: a cookie
+ *
+ * This function manually sets a xcb_*_reply_t pointer that will be used
+ * when requesting the reply for the cookie. Normally you wouldn't use this
+ * directly, since the connection object would asynchronously set the error
+ * data if retrieved from the server.
+ */
+void
+gx_cookie_set_error (GXCookie *self, xcb_generic_error_t *error)
+{
+  self->priv->error = error;
+  g_object_notify (G_OBJECT (self), "error");
+}
+
+/**
+ * gx_cookie_get_reply:
+ * @self: a cookie
+ *
+ * If an error has been recieved for this cookie then a pointer to the
+ * corresponding xcb_*reply_t is returned, else NULL.
+ */
+GXGenericError *
+gx_cookie_get_error (GXCookie *self)
+{
+  return self->priv->error;
+}
 
