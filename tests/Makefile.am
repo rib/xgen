@@ -14,5 +14,5 @@ test_connection_SOURCES = test-connection.c
 test_reply_SOURCES = test-reply.c
 test_async_reply_SOURCES = test-async-reply.c
 test_events_SOURCES = test-events.c
-test_cookie_life_cycle_SOURCES = test-events.c
+test_cookie_life_cycle_SOURCES = test-cookie-life-cycle.c
 

@@ -51,7 +51,9 @@ libgx_@GX_MAJOR_VERSION@_@GX_MINOR_VERSION@_la_SOURCES = \
 	gx-screen.c \
 	gx-screen.h \
 	gx-cookie.c \
-	gx-cookie.h
+	gx-cookie.h \
+	gx-protocol-error.c \
+	gx-protocol-error.h
 
 #libgx_@GX_MAJOR_VERSION@_@GX_MINOR_VERSION@_la_LDADD =
 libgx_@GX_MAJOR_VERSION@_@GX_MINOR_VERSION@_la_LDFLAGS = \

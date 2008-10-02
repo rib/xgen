@@ -25,6 +25,7 @@
 
 #include <gx/gx-drawable.h>
 #include <gx/gx-gcontext.h>
+#include <gx/gx-protocol-error.h>
 
 #include <xcb/xcb.h>
 #include <string.h>

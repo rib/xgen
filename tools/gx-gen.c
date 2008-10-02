@@ -72,6 +72,10 @@ typedef enum
 
   GXGEN_PART_COOKIE_OBJ_H_TYPEDEFS,
 
+  GXGEN_PART_ERROR_CODES_H_ENUMS,
+
+  GXGEN_PART_ERROR_DETAILS_C,
+
   GXGEN_PART_COUNT
 } GXGenPart;
 
@@ -92,7 +96,8 @@ typedef enum
   GXGEN_TYPEDEF,
   GXGEN_REQUEST,
   GXGEN_EVENT,
-  GXGEN_VALUEPARAM
+  GXGEN_VALUEPARAM,
+  GXGEN_ERROR,
 } GXGenType;
 
 #if 0
@@ -901,9 +906,68 @@ gxgen_parse_xmlxcb_file (GXGenState * state, char *filename)
 	}
       else if (strcmp (gxgen_xml_get_node_name (elem), "error") == 0)
 	{
+	  GXGenDefinition *def = g_new0 (GXGenDefinition, 1);
+	  int number = atoi (gxgen_xml_get_prop (elem, "number"));
+	  GList *fields;
+	  GXGenFieldDefinition *field;
+	  GXGenError *error;
+
+	  def->name = g_strdup (gxgen_xml_get_prop (elem, "name"));
+	  def->type = GXGEN_ERROR;
+
+	  fields = gxgen_parse_field_elements (state, elem);
+
+	  field = g_new0 (GXGenFieldDefinition, 1);
+	  field->name = g_strdup ("response");
+	  field->definition = gxgen_find_type (state, "BYTE");
+	  fields = g_list_prepend (fields, field);
+
+	  field = g_new0 (GXGenFieldDefinition, 1);
+	  field->name = g_strdup ("error_code");
+	  field->definition = gxgen_find_type (state, "BYTE");
+	  fields = g_list_prepend (fields, field);
+
+	  field = g_new0 (GXGenFieldDefinition, 1);
+	  field->name = g_strdup ("sequence");
+	  field->definition = gxgen_find_type (state, "CARD16");
+	  fields = g_list_prepend (fields, field);
+
+	  def->fields = fields;
+
+	  state->definitions = g_list_prepend (state->definitions, def);
+
+	  extension->definitions =
+	    g_list_prepend (extension->definitions, def);
+	  error = g_new0 (GXGenError, 1);
+	  error->number = number;
+	  error->definition = def;
+	  extension->errors = g_list_prepend (extension->errors, error);
 	}
       else if (strcmp (gxgen_xml_get_node_name (elem), "errorcopy") == 0)
 	{
+	  GXGenError *error;
+	  GXGenDefinition *def;
+	  int number = atoi (gxgen_xml_get_prop (elem, "number"));
+	  GXGenDefinition *copy_of;
+
+	  def = g_new0 (GXGenDefinition, 1);
+	  def->name = g_strdup (gxgen_xml_get_prop (elem, "name"));
+	  def->type = GXGEN_ERROR;
+	  /* NB: This isn't a very nice thing to be doing if we
+	   * are ever going to care about freeing resources!
+	   * We should deep copy the fields instead. */
+	  copy_of = gxgen_find_type (state,
+				     gxgen_xml_get_prop (elem, "ref"));
+	  def->fields = copy_of->fields;
+
+	  state->definitions = g_list_prepend (state->definitions, def);
+
+	  extension->definitions =
+	    g_list_prepend (extension->definitions, def);
+	  error = g_new0 (GXGenError, 1);
+	  error->number = number;
+	  error->definition = def;
+	  extension->errors = g_list_prepend (extension->errors, error);
 	}
       else if (strcmp (gxgen_xml_get_node_name (elem), "struct") == 0)
 	{
@@ -1544,17 +1608,29 @@ output_reply_list_get (GXGenState *state,
        gxgen_definition_to_gx_type (field->definition, FALSE),
        gx_name_lc);
 
+  out (parts, obj->c_funcs,
+       "  GArray *tmp;\n");
+
+  out (parts, obj->c_funcs,
+       "\n");
+
+  out (parts, obj->c_funcs,
+       "/* It's possible the connection has been closed since the reply\n"
+       " * was recieved: (the reply struct contains weak pointer) */\n"
+       "  if (!%s_reply->connection)\n"
+       "    return NULL;\n",
+       gx_name_lc);
 
   if (is_special_xid_definition (field->definition))
     {
       out (parts, obj->c_funcs,
-       "  GArray *tmp = g_array_new(TRUE, FALSE, sizeof(void *));\n");
+       "  tmp = g_array_new (TRUE, FALSE, sizeof(void *));\n");
       out (parts, obj->c_funcs,
        "  int i;\n");
     }
   else
     out (parts, obj->c_funcs,
-       "  GArray *tmp = g_array_new(TRUE, FALSE, sizeof(%s));\n",
+       "  tmp = g_array_new (TRUE, FALSE, sizeof(%s));\n",
        gxgen_definition_to_gx_type (field->definition, FALSE));
 
   if (is_special_xid_definition (field->definition))
@@ -1747,21 +1823,19 @@ output_reply_variable_declarations (GXGenState *state,
 				    GString **parts,
 				    OutputRequest *out_request)
 {
-  /* GXGenRequest *request = out_request->request; */
+  GXGenRequest *request = out_request->request;
   GXGenOutputObject *obj = out_request->obj;
-  /* char *gx_name_cc; */
-
-  /* name_lc = gxgen_get_lowercase_name (out_request->gx_name); */
-  /* gx_name_cc = gxgen_get_camelcase_name (out_request->gx_name); */
 
   out (parts, obj->c_funcs,
        "\txcb_generic_error_t *xcb_error;\n");
-  out (parts, obj->c_funcs,
-       "\tGX%sReply *reply = g_slice_new (GX%sReply);\n",
-       out_request->gx_name,
-       out_request->gx_name);
 
-  /* g_free (name_cc); */
+  if (g_list_length (request->definition->reply_fields) > 1)
+    {
+      out (parts, obj->c_funcs,
+	   "\tGX%sReply *reply = g_slice_new (GX%sReply);\n",
+	   out_request->gx_name,
+	   out_request->gx_name);
+    }
 }
 
 /**
@@ -1863,10 +1937,20 @@ output_async_request (GXGenState *state,
 
   out (parts, obj->c_funcs, "\n");
 
-  out (parts, obj->c_funcs,
-       "\txcb_cookie =\n"
-       "\t\txcb_%s(\n"
-       "\t\t\tgx_connection_get_xcb_connection (connection)", xcb_name_lc);
+  if (g_list_length (request->definition->reply_fields) > 1)
+    {
+      out (parts, obj->c_funcs,
+	   "\txcb_cookie =\n"
+	   "\t\txcb_%s(\n"
+	   "\t\t\tgx_connection_get_xcb_connection (connection)", xcb_name_lc);
+    }
+  else
+    {
+      out (parts, obj->c_funcs,
+	   "\txcb_cookie =\n"
+	   "\t\txcb_%s_checked (\n"
+	   "\t\t\tgx_connection_get_xcb_connection (connection)", xcb_name_lc);
+    }
 
   for (tmp = request->definition->fields; tmp != NULL;
        tmp = tmp->next)
@@ -1953,12 +2037,18 @@ output_reply (GXGenState *state,
     gxgen_get_lowercase_name (out_request->xcb_name);
   char *obj_name_uc = gxgen_get_uppercase_name (obj->name);
 
-  g_assert (g_list_length (request->definition->reply_fields) > 1);
-
-  out (parts, obj->c_funcs, "\nGX%sReply *\n",
-       out_request->gx_name);
-  out (parts, obj->h_protos, "\nGX%sReply *\n",
-       out_request->gx_name);
+  if (g_list_length (request->definition->reply_fields) > 1)
+    {
+      out (parts, obj->c_funcs, "\nGX%sReply *\n",
+	   out_request->gx_name);
+      out (parts, obj->h_protos, "\nGX%sReply *\n",
+	   out_request->gx_name);
+    }
+  else
+    {
+      out (parts, obj->c_funcs, "\ngboolean\n");
+      out (parts, obj->h_protos, "\ngboolean\n");
+    }
 
   out (parts, obj->c_funcs,
        "gx_%s_%s_reply (GXCookie *cookie, GError **error)\n",
@@ -1981,82 +2071,118 @@ output_reply (GXGenState *state,
     }
 #endif
 
-#if 0
   if (g_list_length (request->definition->reply_fields) <= 1)
     out (parts, obj->c_funcs, "\txcb_void_cookie_t xcb_cookie;\n");
   else
     {
-#endif
       out (parts, obj->c_funcs, "\txcb_%s_cookie_t xcb_cookie;\n",
 	   xcb_name_lc);
-      output_reply_variable_declarations (state, parts, out_request);
-#if 0
     }
-#endif
+  output_reply_variable_declarations (state, parts, out_request);
   out (parts, obj->c_funcs, "\n");
 
   out (parts, obj->c_funcs,
-       "\tg_return_val_if_fail (error == NULL || *error == NULL, NULL);\n");
+       "\tg_return_val_if_fail (error == NULL || *error == NULL, %s);\n",
+       g_list_length (request->definition->reply_fields)
+	  <= 1 ? "FALSE" : "NULL");
 
   out (parts, obj->c_funcs, "\n");
+
+  if (g_list_length (request->definition->reply_fields) > 1)
+    out (parts, obj->c_funcs,
+	 "\treply->connection = connection;\n\n");
+
+  if (g_list_length (request->definition->reply_fields) > 1)
+    {
+
+#if 0
+      if (g_list_length (request->definition->reply_fields) > 1)
+	out (parts, obj->c_funcs, "\t reply = ");
+      out (parts, obj->c_funcs, "\txcb_%s_reply (xcb_cookie);\n",
+	   xcb_name_lc);
+#endif
+
+      out (parts, obj->c_funcs,
+	   "\treply->x11_reply = (GX%sX11Reply *)\n"
+	   "\t\tgx_cookie_get_reply (cookie);\n",
+	   out_request->gx_name);
+
+      out (parts, obj->c_funcs,
+	   "\tif (!reply->x11_reply)\n"
+	   "\t  {\n");
+    }
+
+  /* If the cookie doesn't have an associated reply, then we see
+   * first see if it has an associated error instead.
+   */
+  /* FIXME - we need a mechanism for translating X errors into a glib
+   * error domain, code and message. */
+  out (parts, obj->c_funcs,
+      "\txcb_error = gx_cookie_get_error (cookie);\n");
+  /* FIXME create a func for outputing this... */
+  out (parts, obj->c_funcs,
+       "\tif (xcb_error)\n"
+       "\t  {\n"
+       "\t\tg_set_error (error,\n"
+       "\t\t\tGX_PROTOCOL_ERROR,\n"
+       "\t\t\tgx_protocol_error_from_xcb_generic_error (xcb_error),\n"
+       "\t\t\t\"\");\n"
+       "\t\treturn %s;\n"
+       "\t  }\n",
+       g_list_length (request->definition->reply_fields)
+       > 1 ? "NULL" : "FALSE");
+  /* FIXME - free reply */
+  /* FIXME - check we don't skip any other function cleanup */
 
   out (parts, obj->c_funcs,
        "\txcb_cookie.sequence = gx_cookie_get_sequence (cookie);\n");
 
-#if 0
+  /* If the cookie has no associated reply or error, then we ask
+   * XCB for a reply/error
+   */
   if (g_list_length (request->definition->reply_fields) > 1)
-    out (parts, obj->c_funcs, "\t reply = ");
-  out (parts, obj->c_funcs, "\txcb_%s_reply (xcb_cookie);\n",
-       xcb_name_lc);
-#endif
+    {
+      out (parts, obj->c_funcs,
+	   "\treply->x11_reply = (GX%sX11Reply *)\n"
+	   "\t\txcb_%s_reply (\n"
+	   "\t\t\tgx_connection_get_xcb_connection (connection),\n"
+	   "\t\t\txcb_cookie,\n"
+	   "\t\t\t&xcb_error);\n",
+	   out_request->gx_name,
+	   xcb_name_lc);
+    }
+  else
+    {
+      out (parts, obj->c_funcs,
+	   "\txcb_error = \n"
+	   "\t\txcb_request_check (\n"
+	   "\t\t\tgx_connection_get_xcb_connection (connection),\n"
+	   "\t\t\txcb_cookie);\n");
+    }
 
-#if 0
   out (parts, obj->c_funcs,
-       "\treply->x11_reply = (GX%sX11Reply *)\n"
-       "\t\txcb_%s_reply (\n"
-       "\t\t\tgx_connection_get_xcb_connection (connection),\n"
-       "\t\t\tcookie,\n" "\t\t\t&xcb_error);\n",
-       out_request->gx_name,
-       xcb_name_lc);
-#endif
-  out (parts, obj->c_funcs,
-       "\treply->x11_reply = (GX%sX11Reply *)\n"
-       "\t\tgx_cookie_get_reply (cookie);\n",
-       out_request->gx_name);
-
-  /* FIXME - we need a mechanism for translating X errors into a glib
-   * error domain, code and message. */
-  out (parts, obj->c_funcs,
-       "\tif (!reply->x11_reply)\n"
+       "\tif (xcb_error)\n"
        "\t  {\n"
-       "\t\t/* FIXME \n"
-       "\t\t * gx_error = gx_cookie_get_error (cookie);\n"
-       "\t\t * error = g_set_error (error, GX_CONNECTION,...)\n"
-       "\t\t */\n"
-       "\t  }\n");
+       "\t\tg_set_error (error,\n"
+       "\t\t\tGX_PROTOCOL_ERROR,\n"
+       "\t\t\tgx_protocol_error_from_xcb_generic_error (xcb_error),\n"
+       "\t\t\t\"\");\n"
+       "\t\treturn %s;\n"
+       "\t  }\n",
+       g_list_length (request->definition->reply_fields)
+       > 1 ? "NULL" : "FALSE");
 
 
-  if (!obj->type == GXGEN_IS_CONNECTION_OBJ)
-    out (parts, obj->c_funcs, "\tg_object_unref (connection);\n");
+  if (g_list_length (request->definition->reply_fields) > 1)
+    out (parts, obj->c_funcs,
+	 "\n\t  }\n");
 
-#if 0
-#error "FIXME - remember to release the API reference if the connection"
-#error "gets finalised too!!!"
-
-  out (parts, obj->c_funcs,
-       "/* NB: The GX API internally manages a cookie reference that\n"
-       " * expires once the cookies corresponding reply has been recieved\n"
-       " */\n");
-  out (parts, obj->c_funcs, "\tg_object_unref (cookie);\n");
-#endif
   out (parts, obj->c_funcs,
        "\tgx_connection_unregister_cookie (connection, cookie);\n");
 
-#if 0
   if (g_list_length (request->definition->reply_fields) <= 1)
-    out (parts, obj->c_funcs, "\treturn;\n");
+    out (parts, obj->c_funcs, "\treturn TRUE;\n");
   else
-#endif
     out (parts, obj->c_funcs, "\treturn reply;\n");
 
   out (parts, obj->c_funcs,
@@ -2150,10 +2276,8 @@ output_sync_request (GXGenState *state,
   if (g_list_length (request->definition->reply_fields) <= 1)
     out (parts, obj->c_funcs, "\txcb_void_cookie_t cookie;\n");
   else
-    {
-      out (parts, obj->c_funcs, "\txcb_%s_cookie_t cookie;\n", xcb_name_lc);
-      output_reply_variable_declarations (state, parts, out_request);
-    }
+    out (parts, obj->c_funcs, "\txcb_%s_cookie_t cookie;\n", xcb_name_lc);
+  output_reply_variable_declarations (state, parts, out_request);
 
   /* If the request has a GXGEN_VALUEPARAM field, then we will need
    * to translate an array of GXMaskValueItems from the user.
@@ -2170,13 +2294,25 @@ output_sync_request (GXGenState *state,
 	 "\tg_return_val_if_fail (error == NULL || *error == NULL, NULL);\n");
 
   if (g_list_length (request->definition->reply_fields) > 1)
-      out (parts, obj->c_funcs,
-	   "\treply->connection = connection;\n\n");
+    out (parts, obj->c_funcs,
+	 "\treply->connection = connection;\n\n");
 
+  if (g_list_length (request->definition->reply_fields) > 1)
+    {
+      out (parts, obj->c_funcs,
+	   "\tcookie =\n"
+	   "\t\txcb_%s (\n",
+	   xcb_name_lc);
+    }
+  else
+    {
+      out (parts, obj->c_funcs,
+	   "\tcookie =\n"
+	   "\t\txcb_%s_checked (\n",
+	   xcb_name_lc);
+    }
   out (parts, obj->c_funcs,
-       "\tcookie =\n"
-       "\t\txcb_%s(\n"
-       "\t\t\tgx_connection_get_xcb_connection (connection)", xcb_name_lc);
+       "\t\t\tgx_connection_get_xcb_connection (connection)");
 
   for (tmp = request->definition->fields; tmp != NULL;
        tmp = tmp->next)
@@ -2209,10 +2345,32 @@ output_sync_request (GXGenState *state,
 	   "\treply->x11_reply = (GX%sX11Reply *)\n"
 	   "\t\txcb_%s_reply (\n"
 	   "\t\t\tgx_connection_get_xcb_connection (connection),\n"
-	   "\t\t\tcookie,\n" "\t\t\t&xcb_error);\n",
+	   "\t\t\tcookie,\n"
+	   "\t\t\t&xcb_error);\n",
 	   out_request->gx_name,
 	   xcb_name_lc);
     }
+  else
+    {
+      out (parts, obj->c_funcs,
+	   "\txcb_error = \n"
+	   "\t\txcb_request_check (\n"
+	   "\t\t\tgx_connection_get_xcb_connection (connection),\n"
+	   "\t\t\tcookie);\n");
+    }
+
+  /* FIXME create a func for outputing this... */
+  out (parts, obj->c_funcs,
+       "\tif (xcb_error)\n"
+       "\t  {\n"
+       "\t\tg_set_error (error,\n"
+       "\t\t\tGX_PROTOCOL_ERROR,\n"
+       "\t\t\tgx_protocol_error_from_xcb_generic_error (xcb_error),\n"
+       "\t\t\t\"\");\n"
+       "\t\treturn %s;\n"
+       "\t  }\n",
+       g_list_length (request->definition->reply_fields)
+       > 1 ? "NULL" : "FALSE");
 
   if (!obj->type == GXGEN_IS_CONNECTION_OBJ)
     out (parts, obj->c_funcs, "\tg_object_unref (connection);\n");
@@ -2283,14 +2441,8 @@ output_requests (GXGenState * state,
 
       output_reply_free (state, parts, out_request);
 
-      /* All requests that have a reply may be issued asynchronously such
-       * that the user gets a cookie back for the request and can
-       * demand the result at the last moment */
-      if (g_list_length (request->definition->reply_fields) > 1)
-	{
-	  output_async_request (state, parts, out_request);
-	  output_reply (state, parts, out_request);
-	}
+      output_async_request (state, parts, out_request);
+      output_reply (state, parts, out_request);
 
       output_sync_request (state, parts, out_request);
 
@@ -2305,8 +2457,8 @@ output_requests (GXGenState * state,
 
 static void
 output_event_typedefs (GXGenState * state,
-		    GXGenExtension * extension,
-		    GString ** parts)
+		       GXGenExtension * extension,
+		       GString ** parts)
 {
   GXGenPart typedefs = GXGEN_PART_CONNECTION_OBJ_H_TYPEDEFS;
   GList *tmp;
@@ -2341,6 +2493,28 @@ output_event_typedefs (GXGenState * state,
 }
 
 static void
+output_errors (GXGenState * state,
+	       GXGenExtension * extension,
+	       GString ** parts)
+{
+  GList *tmp;
+  GXGenPart error_codes = GXGEN_PART_ERROR_CODES_H_ENUMS;
+  GXGenPart error_details = GXGEN_PART_ERROR_DETAILS_C;
+
+  for (tmp = extension->errors; tmp != NULL; tmp = tmp->next)
+    {
+      GXGenError *error = tmp->data;
+      GXGenDefinition *definition = error->definition;
+
+      out (parts, error_codes, "GX_PROTOCOL_ERROR_%s,\n",
+	   gxgen_get_uppercase_name (definition->name));
+      out (parts, error_details, "{%d, \"%s\"},\n",
+	   error->number,
+	   gxgen_get_uppercase_name (definition->name));
+    }
+}
+
+static void
 output_extension_code (GXGenState * state,
 		       GXGenExtension * extension,
 		       GString ** parts)
@@ -2354,6 +2528,8 @@ output_extension_code (GXGenState * state,
   output_requests (state, extension, parts);
 
   output_event_typedefs (state, extension, parts);
+
+  output_errors (state, extension, parts);
 }
 
 static void
@@ -2370,6 +2546,8 @@ output_all_gx_code (GXGenState * state)
   FILE *gcontext_header;
   FILE *gcontext_code;
   FILE *cookie_header;
+  FILE *error_codes_header;
+  FILE *error_details_code;
   GString *parts[GXGEN_PART_COUNT];
   int i;
   GList *tmp;
@@ -2582,6 +2760,32 @@ output_all_gx_code (GXGenState * state)
 	  parts[GXGEN_PART_COOKIE_OBJ_H_TYPEDEFS]->len, cookie_header);
 
   fclose (cookie_header);
+
+  error_codes_header = fopen ("gx-protocol-error-codes-gen.h", "w");
+  if (!error_codes_header)
+    {
+      perror ("Failed to open header file");
+      return;
+    }
+
+  /* error codes enum */
+  fwrite (parts[GXGEN_PART_ERROR_CODES_H_ENUMS]->str, 1,
+	  parts[GXGEN_PART_ERROR_CODES_H_ENUMS]->len, error_codes_header);
+
+  fclose (error_codes_header);
+
+  error_details_code = fopen ("gx-protocol-error-details-gen.h", "w");
+  if (!error_details_code)
+    {
+      perror ("Failed to open header file");
+      return;
+    }
+
+  /* typedefs */
+  fwrite (parts[GXGEN_PART_ERROR_DETAILS_C]->str, 1,
+	  parts[GXGEN_PART_ERROR_DETAILS_C]->len, error_details_code);
+
+  fclose (error_details_code);
 
 
   for (i = 0; i < GXGEN_PART_COUNT; i++)

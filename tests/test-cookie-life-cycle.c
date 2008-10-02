@@ -2,6 +2,7 @@
 #include <gx.h>
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 
 /* This is just to try and catch a silly mistake with the internal ref counting
@@ -62,11 +63,13 @@ cookie_finalize_notify (gpointer data,
 }
 
 static void
-query_tree_reply_handler (GXCookie *self, gpointer user_data)
+query_tree_reply_handler (GXCookie *self,
+			  const GParamSpec *pspec,
+			  gpointer user_data)
 {
   GXQueryTreeReply *query_tree;
 
-  query_tree = gx_window_query_reply (self);
+  query_tree = gx_window_query_tree_reply (self, NULL);
   /* SNIP processing the reply */
   gx_window_query_tree_reply_free (query_tree);
 
@@ -85,10 +88,6 @@ main(int argc, char **argv)
   GXCookie *cookie1;
   GXCookie *cookie2;
   GXQueryTreeReply *query_tree;
-  GArray *array;
-  GXWindow **children;
-  GXWindow *child;
-  int i;
   int error = 0;
 
   g_type_init ();
@@ -104,18 +103,22 @@ main(int argc, char **argv)
 
 
   cookie0 = gx_window_query_tree_async (root);
-  g_object_weak_ref (cookie0, cookie_finalize_notify, &cookie0_finalized);
+  g_object_weak_ref (G_OBJECT (cookie0),
+		     cookie_finalize_notify,
+		     &cookie0_finalized);
   /* You could do work here to hide the request latency. */
-  query_tree = gx_window_query_reply (cookie0);
+  query_tree = gx_window_query_tree_reply (cookie0, NULL);
   /* SNIP processing the reply */
   gx_window_query_tree_reply_free (query_tree);
 
 
   cookie1 = gx_window_query_tree_async (root);
-  g_object_weak_ref (cookie1, cookie_finalize_notify, &cookie1_finalized);
+  g_object_weak_ref (G_OBJECT (cookie1),
+		     cookie_finalize_notify,
+		     &cookie1_finalized);
   g_signal_connect (cookie1,
-		    "reply",
-		    query_tree_reply_handler,
+		    "notify::reply",
+		    G_CALLBACK (query_tree_reply_handler),
 		    NULL);
 
   gx_connection_flush (connection, FALSE);
@@ -127,7 +130,9 @@ main(int argc, char **argv)
   /* Check that when the connection is unrefed then all internal references
    * to cookies are unrefed */
   cookie2 = gx_window_query_tree_async (root);
-  g_object_weak_ref (cookie2, cookie_finalize_notify, &cookie2_finalized);
+  g_object_weak_ref (G_OBJECT (cookie2),
+		     cookie_finalize_notify,
+		     &cookie2_finalized);
 
   g_object_unref (root);
   g_object_unref (connection);

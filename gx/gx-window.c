@@ -26,6 +26,7 @@
 
 #include <gx/gx-window.h>
 #include <gx/gx-connection.h>
+#include <gx/gx-protocol-error.h>
 
 #include <xcb/xcb.h>
 #include <string.h>
@@ -454,6 +455,8 @@ gx_window_constructor (GType type,
 			 value_list
       );
     }
+
+  g_object_unref (connection);
 
   return self;
 }

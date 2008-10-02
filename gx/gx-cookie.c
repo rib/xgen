@@ -39,7 +39,7 @@ enum {
 enum {
   PROP_0,
   PROP_CONNECTION,
-  PROP_COOKIE_TYPE,
+  PROP_TYPE,
   PROP_SEQUENCE,
   PROP_REPLY,
   PROP_ERROR
@@ -70,64 +70,12 @@ static void gx_cookie_set_property (GObject *object,
 static void gx_cookie_init (GXCookie *self);
 static void gx_cookie_finalize (GObject *self);
 
-
 #if 0
-static GInitiallyUnownedClass *parent_class = NULL;
 /* static guint gx_cookie_signals[LAST_SIGNAL] = { 0 }; */
 #endif
 
 /* NB: This declares gx_cookie_parent_class */
 G_DEFINE_TYPE (GXCookie, gx_cookie, G_TYPE_INITIALLY_UNOWNED);
-
-#if 0
-GType
-gx_cookie_get_type (void)
-{
-  static GType self_type = 0;
-
-  if (!self_type)
-    {
-      static const GTypeInfo object_info =
-	{
-	  sizeof(GXCookieClass), /* class structure size */
-	  NULL, /* base class initializer */
-	  NULL, /* base class finalizer */
-	  (GClassInitFunc)gx_cookie_class_init, /* class initializer */
-	  NULL, /* class finalizer */
-	  NULL, /* class data */
-	  sizeof(GXCookie), /* instance structure size */
-	  0, /* preallocated instances */
-	  (GInstanceInitFunc)gx_cookie_init, /* instance initializer */
-	  NULL /* function table */
-	};
-
-      /* add the type of your parent class here */
-      self_type = g_type_register_static(G_TYPE_INITIALLY_UNOWNED,
-					 "GXCookie", /* type name */
-					 &object_info, /* type info */
-					 0 /* flags */
-      );
-#if 0
-      /* add interfaces here */
-      static const GInterfaceInfo mydoable_info =
-	{
-	  (GInterfaceInitFunc)
-	    gx_cookie_mydoable_interface_init,
-	  (GInterfaceFinalizeFunc)NULL,
-	  NULL /* interface data */
-	};
-
-      if(self_type != G_TYPE_INVALID) {
-	  g_type_add_interface_static(self_type,
-				      MY_TYPE_MYDOABLE,
-				      &mydoable_info);
-      }
-#endif
-    }
-
-  return self_type;
-}
-#endif
 
 static void
 gx_cookie_class_init (GXCookieClass *klass) /* Class Initialization */
@@ -135,16 +83,12 @@ gx_cookie_class_init (GXCookieClass *klass) /* Class Initialization */
   GObjectClass *gobject_class = G_OBJECT_CLASS(klass);
   GParamSpec *new_param;
 
-#if 0
-  parent_class = g_type_class_peek_parent(klass);
-#endif
-
   gobject_class->finalize = gx_cookie_finalize;
 
   gobject_class->get_property = gx_cookie_get_property;
   gobject_class->set_property = gx_cookie_set_property;
 
-  new_param = g_param_spec_int ("cookie-type", /* name */
+  new_param = g_param_spec_int ("type", /* name */
 				"Cookie Type", /* nick name */
 				"The type of cookie ", /* description */
 				0, /* minimum */
@@ -155,7 +99,7 @@ gx_cookie_class_init (GXCookieClass *klass) /* Class Initialization */
 				| G_PARAM_READABLE
 				);
   g_object_class_install_property (gobject_class,
-				   PROP_COOKIE_TYPE,
+				   PROP_TYPE,
 				   new_param);
 
   new_param = g_param_spec_uint ("sequence", /* name */
@@ -263,7 +207,7 @@ gx_cookie_get_property (GObject *object,
     case PROP_CONNECTION:
       g_value_set_object (value, self->priv->connection);
       break;
-    case PROP_COOKIE_TYPE:
+    case PROP_TYPE:
       g_value_set_int (value, self->priv->type);
       break;
     case PROP_SEQUENCE:
@@ -309,14 +253,14 @@ gx_cookie_set_property (GObject *object,
     case PROP_CONNECTION:
       self->priv->connection = g_value_get_object(value);
       g_object_add_weak_pointer (G_OBJECT (self->priv->connection),
-				 &self->priv->connection);
+				 (gpointer *)&self->priv->connection);
 #if 0
       g_object_weak_ref (self->priv->connection,
 			 connection_finalized_notify,
 			 self);
 #endif
       break;
-    case PROP_COOKIE_TYPE:
+    case PROP_TYPE:
       self->priv->type = g_value_get_int (value);
       break;
     case PROP_SEQUENCE:

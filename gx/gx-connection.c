@@ -28,6 +28,7 @@
 #include <gx/gx-window.h>
 #include <gx/gx-types.h>
 #include <gx/gx-mask-value-item.h>
+#include <gx/gx-protocol-error.h>
 
 #include <glib.h>
 
@@ -137,6 +138,8 @@ static guint gx_connection_signals[LAST_SIGNAL] = { 0 };
 
 static GMainLoop *loop;
 
+static GQuark cookie_pending_quark;
+
 /* NB: This declares gx_connection_parent_class */
 G_DEFINE_TYPE (GXConnection, gx_connection, G_TYPE_OBJECT);
 
@@ -146,6 +149,8 @@ gx_connection_class_init (GXConnectionClass *klass)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   GParamSpec *new_param;
+
+  cookie_pending_quark = g_quark_from_static_string ("pending");
 
   gobject_class->finalize = gx_connection_finalize;
   gobject_class->dispose = gx_connection_dispose;
@@ -264,10 +269,8 @@ gx_connection_init (GXConnection *self)
 
   self->priv->events_queue = g_queue_new ();
   self->priv->response_queue = g_queue_new ();
-#if 0
-  self->priv->replies_queue = g_queue_new ();
-  self->priv->errors_queue = g_queue_new ();
-#endif
+  self->priv->pending_reply_cookies = g_queue_new ();
+  self->priv->zombie_reply_cookies = g_queue_new ();
 }
 
 GXConnection *
@@ -287,10 +290,8 @@ gx_connection_finalize (GObject *object)
 
   g_queue_free (self->priv->events_queue);
   g_queue_free (self->priv->response_queue);
-#if 0
-  g_queue_free (self->priv->replies_queue);
-  g_queue_free (self->priv->errors_queue);
-#endif
+  g_queue_free (self->priv->pending_reply_cookies);
+  g_queue_free (self->priv->zombie_reply_cookies);
 
   G_OBJECT_CLASS (gx_connection_parent_class)->finalize (object);
 }
@@ -421,6 +422,7 @@ check_for_any_reply_or_error (GXConnection *self,
 	  g_object_weak_ref (G_OBJECT (cookie),
 			     cookie_zombie_finalized_notify,
 			     self);
+	  g_object_set_qdata (G_OBJECT (cookie), cookie_pending_quark, NULL);
 	  return cookie;
 	}
     }
@@ -428,40 +430,33 @@ check_for_any_reply_or_error (GXConnection *self,
   return NULL;
 }
 
+/**
+ * reads a single event, reply or error from XCB and queues it
+ * up for dispatch by our custom GSource.
+ *
+ * this function returns FALSE if nothing was read from XCB and
+ * queued.
+ */
 static gboolean
-check_for_any_data (GXConnection *self)
+queue_xcb_next (GXConnection *self)
 {
   xcb_connection_t *xcb_connection =
     gx_connection_get_xcb_connection (self);
   xcb_generic_event_t *event;
-  void *reply;
-  xcb_generic_error_t *error;
+  void *reply = NULL;
+  xcb_generic_error_t *error = NULL;
   GXCookie *cookie = NULL;
 
-  if (g_queue_peek_head (self->priv->events_queue) != NULL)
-    return TRUE;
+  g_printerr ("queue_xcb_next0\n");
+
   event = xcb_poll_for_event (xcb_connection);
   if (event)
     {
       g_queue_push_tail (self->priv->events_queue, event);
+      g_printerr ("queue_xcb_next EVENT\n");
       return TRUE;
     }
 
-#if 0
-  g_assert (!xcb_source->event);
-  xcb_source->event = xcb_poll_for_event (xcb_connection);
-  if (xcb_source->event)
-    return TRUE;
-#endif
-
-#if 0
-  if (g_queue_peek_head (self->priv->replies_queue) != NULL
-      || g_queue_peek_head (self->priv->errors_queue) != NULL)
-    return TRUE;
-#endif
-
-  if (g_queue_peek_head (self->priv->response_queue) != NULL)
-    return TRUE;
 
   /* FIXME: This doesn't seem to be a very nice way to have to deal with
    * replies, but xcb does not currently have a xcb_poll_for_any_reply()
@@ -478,11 +473,13 @@ check_for_any_data (GXConnection *self)
 
       if (reply)
 	{
+	  g_printerr ("queue_xcb_next REPLY\n");
 	  response_data->type = _GX_COOKIE_RESPONSE_TYPE_REPLY;
 	  response_data->data = reply;
 	}
       else
 	{
+	  g_printerr ("queue_xcb_next ERROR\n");
 	  response_data->type = _GX_COOKIE_RESPONSE_TYPE_ERROR;
 	  response_data->data = error;
 	}
@@ -492,6 +489,17 @@ check_for_any_data (GXConnection *self)
       return TRUE;
     }
 
+  return FALSE;
+}
+
+static gboolean
+is_anything_pending (GXConnection *self)
+{
+  if (g_queue_peek_head (self->priv->events_queue) != NULL)
+    return TRUE;
+
+  if (g_queue_peek_head (self->priv->response_queue) != NULL)
+    return TRUE;
 
   return FALSE;
 }
@@ -501,12 +509,13 @@ xcb_event_prepare (GSource *source,
 		   gint    *timeout)
 {
   GXXCBFDSource *xcb_source = (GXXCBFDSource *)source;
-  //GXConnection *self = xcb_source->connection;
 
   /* We don't mind how long poll() will block */
   *timeout = -1;
 
-  return check_for_any_data (xcb_source->connection);
+  return is_anything_pending (xcb_source->connection)
+	 || (queue_xcb_next (xcb_source->connection)
+	     && is_anything_pending (xcb_source->connection));
 }
 
 static gboolean
@@ -515,7 +524,9 @@ xcb_event_check (GSource *source)
   GXXCBFDSource *xcb_source = (GXXCBFDSource *)source;
 
   if (xcb_source->xcb_poll_fd.revents & G_IO_IN)
-    return check_for_any_data (xcb_source->connection);
+    return is_anything_pending (xcb_source->connection)
+	   || (queue_xcb_next (xcb_source->connection)
+	       && is_anything_pending (xcb_source->connection));
 
   return FALSE;
 }
@@ -529,7 +540,7 @@ signal_event (GXConnection *connection, xcb_generic_event_t *event)
    * event and also send a signal from the corresponding GXWindow. */
 
   /* TODO: we should use the name of the signal as the detail */
-  g_signal_emit (connection, EVENT_SIGNAL, 0, event);
+  g_signal_emit (connection, gx_connection_signals[EVENT_SIGNAL], 0, event);
 
 }
 
@@ -561,65 +572,16 @@ signal_error (GXConnection *connection, GXCookie *cookie)
   g_signal_emit (connection, ERROR_SIGNAL, 0);
 }
 
-#if 0
-static gboolean
-xcb_event_dispatch (GSource *source, GSourceFunc callback, gpointer data)
-{
-  GXXCBFDSource	      *xcb_source = (GXXCBFDSource *)source;
-  xcb_connection_t    *xcb_connection =
-    gx_connection_get_xcb_connection (xcb_source->connection);
-  xcb_generic_event_t *event;
-  GXCookie	      *cookie;
-  void		      *reply;
-  xcb_generic_error_t *error;
-
-  event = xcb_source->event;
-  xcb_source->event = NULL;
-
-  cookie = xcb_source->cookie;
-  g_object_unref (xcb_source->cookie);
-  xcb_source->cookie = NULL;
-
-  reply = xcb_source->reply;
-  xcb_source->reply = NULL;
-
-  error = xcb_source->error;
-  xcb_source->error = NULL;
-
-  do
-    {
-      if (event)
-	signal_event (xcb_source->connection, event);
-
-      event = xcb_poll_for_event (xcb_connection);
-
-      if (cookie)
-	{
-	  if (reply)
-	    signal_reply (xcb_source->connection, cookie);
-	  else if (error)
-	    signal_error (xcb_source->connection, cookie);
-	  else
-	    g_assert (0);
-	}
-
-      cookie =
-	check_for_any_reply_or_error (xcb_source->connection,
-				      &reply,
-				      &error);
-    } while (event || reply || error);
-
-  return TRUE;
-}
-#endif
 static gboolean
 xcb_event_dispatch (GSource *source, GSourceFunc callback, gpointer data)
 {
   GXXCBFDSource	*xcb_source = (GXXCBFDSource *)source;
   GXConnection	*connection = xcb_source->connection;
 
+  g_printerr ("xcb_event_dispatch\n");
+
   /* Queue up all data recieved from XCB. */
-  while (check_for_any_data (connection))
+  while (queue_xcb_next (connection))
     ; /*  */
 
   if (g_queue_peek_head (connection->priv->events_queue))
@@ -728,7 +690,7 @@ gx_connection_flush (GXConnection *connection, gboolean flush_server)
      xcb_aux_flush (connection->priv->xcb_connection);
      else
      */
-  xcb_flush(connection->priv->xcb_connection);
+  xcb_flush (connection->priv->xcb_connection);
 }
 
 void
@@ -783,7 +745,7 @@ gx_connection_has_error (GXConnection *self)
 void
 gx_connection_register_cookie (GXConnection *self, GXCookie *cookie)
 {
-  g_object_ref (cookie);
+  g_object_ref_sink (cookie);
 
   /* If developers manually unref a cookie, instead of calling
    * gx_connection_unregister_cookie, then we will be notified, and all will
@@ -799,6 +761,7 @@ gx_connection_register_cookie (GXConnection *self, GXCookie *cookie)
 		     self);
   g_queue_push_tail (self->priv->pending_reply_cookies,
 		     cookie);
+  g_object_set_qdata (G_OBJECT (cookie), cookie_pending_quark, "1");
 }
 
 /**
@@ -821,12 +784,14 @@ gx_connection_unregister_cookie (GXConnection *self, GXCookie *cookie)
 
   response_queue_remove_cookie_references (self, cookie);
 
-  g_object_weak_unref (G_OBJECT (cookie),
-		       cookie_pending_finalized_notify,
-		       self);
-  g_object_weak_unref (G_OBJECT (cookie),
-		       cookie_zombie_finalized_notify,
-		       self);
+  if (g_object_get_qdata (G_OBJECT (cookie), cookie_pending_quark))
+    g_object_weak_unref (G_OBJECT (cookie),
+			 cookie_pending_finalized_notify,
+			 self);
+  else
+    g_object_weak_unref (G_OBJECT (cookie),
+			 cookie_zombie_finalized_notify,
+			 self);
   g_object_unref (cookie);
 }
 
