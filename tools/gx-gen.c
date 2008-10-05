@@ -25,6 +25,7 @@
 
 typedef enum
 {
+  /* Base types */
   XGEN_VOID,
   XGEN_BOOLEAN,
   XGEN_CHAR,
@@ -33,24 +34,24 @@ typedef enum
   XGEN_XID,
   XGEN_FLOAT,
   XGEN_DOUBLE,
+
+  /* Basic composite types */
   XGEN_STRUCT,
   XGEN_UNION,
   XGEN_ENUM,
   XGEN_XIDUNION,
+
+  /* Type definitions */
   XGEN_TYPEDEF,
+
+  /* Protocol types */
   XGEN_REQUEST,
   XGEN_EVENT,
   XGEN_VALUEPARAM,
-  XGEN_ERROR,
+  XGEN_ERROR
+  /* XGEN_LIST */
 } XGenType;
 
-#if 0
-typedef enum
-{
-  XGEN_REQUEST,
-  XGEN_RESPONSE
-} XGenDirection;
-#endif
 
 typedef struct _XGenDefinition XGenDefinition;
 struct _XGenDefinition
@@ -58,25 +59,27 @@ struct _XGenDefinition
   char *name;
   XGenType type;
 
-  /* FIXME: Put the following into seperate typedefs
+  /* Really FIXME: Put the following into seperate typedefs
    * and create a union: */
 
-  /* base types */
+  /* Base types */
   unsigned int size;
 
-  /* struct, union, enum */
   union {
+    /* STRUCT / UNION / XIDUNION / REQUEST / EVENT / ERROR */
     GList *fields;
+
+    /* ENUM */
     GList *items;
   };
 
-  /* typedef / valueparam */
+  /* XGEN_TYPEDEF / XGEN_VALUEPARAM */
   XGenDefinition *reference;
 
-  /* requests */
+  /* XGEN_REQUEST */
   GList *reply_fields;
 
-  /* valueparams */
+  /* XGEN_VALUEPARAM */
   gchar *mask_name;
   gchar *list_name;
 };
@@ -631,6 +634,8 @@ xgen_parse_field_elements (XGenState * state, xmlNode * elem)
 	}
       else if (strcmp (xgen_xml_get_node_name (cur), "list") == 0)
 	{
+	  /* FIXME - we shouldn't loose fact that these fields belong
+	   * to a list*/
 	  field->name = strdup (xgen_xml_get_prop (cur, "name"));
 	  field->definition = xgen_find_type (state,
 						xgen_xml_get_prop (cur,
@@ -1346,28 +1351,137 @@ output_pad_field (GXGenOutputContext *output_context,
   g_free (pad_name);
 }
 
+GXGenOutputNamespace *
+setup_request_namespace (GXGenOutputContext *output_context)
+{
+  const XGenExtension *ext = output_context->extension;
+  const GXGenOutputObject *obj = output_context->obj;
+  GXGenOutputNamespace *namespace = g_new0 (GXGenOutputNamespace, 1);
+
+  if (strcmp (ext->header, "xproto") == 0)
+    {
+      namespace->gx_cc = g_strdup (obj->name_cc);
+      namespace->gx_uc = g_strdup_printf ("%s_", obj->name_uc);
+      namespace->gx_lc = g_strdup_printf ("%s_", obj->name_lc);
+    }
+  else
+    {
+      namespace->gx_cc =
+	g_strdup_printf ("%s%s",
+			 obj->name_cc,
+			 gxgen_get_camelcase_name (ext->header));
+      namespace->gx_uc =
+	g_strdup_printf ("%s_%s_",
+			 obj->name_uc,
+			 gxgen_get_uppercase_name (ext->header));
+      namespace->gx_lc =
+	g_strdup_printf ("%s_%s_",
+			 obj->name_lc,
+			 gxgen_get_lowercase_name (ext->header));
+    }
+
+  if (strcmp (ext->header, "xproto") == 0)
+    {
+      namespace->xcb_lc = g_strdup ("");
+      namespace->xcb_cc = g_strdup ("");
+      namespace->xcb_uc = g_strdup ("");
+    }
+  else
+    {
+      namespace->xcb_lc =
+	g_strdup_printf ("%s_",
+			 gxgen_get_lowercase_name (ext->header));
+      namespace->xcb_cc = g_strdup ("FIXME");
+      namespace->xcb_uc = g_strdup ("FIXME");
+    }
+
+  return namespace;
+}
+
+GXGenOutputNamespace *
+setup_field_type_namespace (GXGenOutputContext *output_context,
+			    XGenFieldDefinition *field)
+{
+  const XGenExtension *ext = output_context->extension;
+  GXGenOutputNamespace *namespace = g_new0 (GXGenOutputNamespace, 1);
+
+  namespace->gx_cc = g_strdup ("FIXME");
+  namespace->gx_uc = g_strdup ("FIXME");
+  namespace->gx_lc = g_strdup ("FIXME");
+
+  if (strcmp (ext->header, "xproto") == 0)
+    {
+      namespace->xcb_lc = g_strdup ("");
+      namespace->xcb_uc = g_strdup ("");
+      namespace->xcb_cc = g_strdup ("");
+    }
+  else
+    {
+      namespace->xcb_lc =
+	g_strdup_printf ("%s_",
+			 gxgen_get_lowercase_name (ext->header));
+      namespace->xcb_cc = g_strdup ("FIXME");
+      namespace->xcb_uc = g_strdup ("FIXME");
+    }
+
+  return namespace;
+}
+
+static void
+free_namespace (GXGenOutputNamespace *namespace)
+{
+  g_free (namespace->gx_cc);
+  g_free (namespace->gx_uc);
+  g_free (namespace->gx_lc);
+  g_free (namespace->xcb_cc);
+  g_free (namespace->xcb_uc);
+  g_free (namespace->xcb_lc);
+  g_free (namespace);
+}
+
+
+
 static void
 output_field_xcb_reference (GXGenOutputContext *output_context,
 			    GXGenPart part,
 			    XGenFieldDefinition * field)
 {
   if (strcmp (field->definition->name, "DRAWABLE") == 0)
-    {
-      OUT (part, "gx_drawable_get_xid (%s)", field->name);
-    }
+    OUT (part, "gx_drawable_get_xid (%s)", field->name);
   else if (strcmp (field->definition->name, "PIXMAP") == 0
 	   || strcmp (field->definition->name, "WINDOW") == 0)
     {
       OUT (part,
 	   "gx_drawable_get_xid (\n"
-	   "\t\t\t\tGX_DRAWABLE(%s))", field->name);
+	   "\t\t\t\tGX_DRAWABLE(%s))",
+	   field->name);
     }
   else if (strcmp (field->definition->name, "GCONTEXT") == 0)
     {
-      OUT (part, "gx_gcontext_get_xcb_gcontext (%s)", field->name);
+      OUT (part, "gx_gcontext_get_xcb_gcontext (%s)",
+	   field->name);
+    }
+  else if (field->length == NULL
+	   && (field->definition->type == XGEN_STRUCT
+	       || field->definition->type == XGEN_UNION))
+    {
+      GXGenOutputNamespace *namespace =
+	setup_field_type_namespace (output_context, field);
+      char * type_lc = gxgen_get_lowercase_name (field->definition->name);
+      /* NB: XCB passes structures by value,
+       * while GX passes them by reference */
+      OUT (part, "*(xcb_%s%s_t *)%s",
+	   namespace->xcb_lc,
+	   type_lc,
+	   field->name);
+
+      g_free (type_lc);
+      free_namespace (namespace);
     }
   else
-    OUT (part, "%s", field->name);
+    {
+      OUT (part, "%s", field->name);
+    }
 }
 
 static gboolean
@@ -1999,6 +2113,12 @@ output_async_request (GXGenOutputContext *output_context)
 	        ",\n\t\tGXMaskValueItem *mask_value_items");
 	  has_mask_value_items = TRUE;
 	}
+      else if (field->definition->type == XGEN_STRUCT
+	       || field->definition->type == XGEN_UNION)
+	{
+	  OUT2 (obj->h_protos, obj->c_funcs,
+		",\n\t\t%s *%s", type, field->name);
+	}
       else
 	OUT2 (obj->h_protos, obj->c_funcs,
 	      ",\n\t\t%s %s", type, field->name);
@@ -2293,6 +2413,12 @@ output_sync_request (GXGenOutputContext *output_context)
 	        ",\n\t\tGXMaskValueItem *mask_value_items");
 	  has_mask_value_items = TRUE;
 	}
+      else if (field->definition->type == XGEN_STRUCT
+	       || field->definition->type == XGEN_UNION)
+	{
+	  OUT2 (obj->h_protos, obj->c_funcs,
+		",\n\t\t%s *%s", type, field->name);
+	}
       else
 	OUT2 (obj->h_protos, obj->c_funcs,
 	      ",\n\t\t%s %s", type, field->name);
@@ -2422,59 +2548,6 @@ output_sync_request (GXGenOutputContext *output_context)
     OUT (obj->c_funcs, "\n\treturn reply;\n");
 
   OUT (obj->c_funcs, "}\n\n");
-}
-
-GXGenOutputNamespace *
-setup_request_namespace (GXGenOutputContext *output_context)
-{
-  const XGenExtension *ext = output_context->extension;
-  const GXGenOutputObject *obj = output_context->obj;
-  GXGenOutputNamespace *namespace = g_new0 (GXGenOutputNamespace, 1);
-
-  if (strcmp (ext->header, "xproto") == 0)
-    {
-      namespace->gx_cc = g_strdup (obj->name_cc);
-      namespace->gx_uc = g_strdup_printf ("%s_", obj->name_uc);
-      namespace->gx_lc = g_strdup_printf ("%s_", obj->name_lc);
-    }
-  else
-    {
-      namespace->gx_cc =
-	g_strdup_printf ("%s%s",
-			 obj->name_cc,
-			 gxgen_get_camelcase_name (ext->header));
-      namespace->gx_uc =
-	g_strdup_printf ("%s_%s_",
-			 obj->name_uc,
-			 gxgen_get_uppercase_name (ext->header));
-      namespace->gx_lc =
-	g_strdup_printf ("%s_%s_",
-			 obj->name_lc,
-			 gxgen_get_lowercase_name (ext->header));
-    }
-
-  if (strcmp (ext->header, "xproto") == 0)
-    namespace->xcb_lc = g_strdup ("");
-  else
-    {
-      namespace->xcb_lc =
-	g_strdup_printf ("%s_",
-			 gxgen_get_lowercase_name (ext->header));
-    }
-
-  return namespace;
-}
-
-static void
-free_namespace (GXGenOutputNamespace *namespace)
-{
-  g_free (namespace->gx_cc);
-  g_free (namespace->gx_uc);
-  g_free (namespace->gx_lc);
-  g_free (namespace->xcb_cc);
-  g_free (namespace->xcb_uc);
-  g_free (namespace->xcb_lc);
-  g_free (namespace);
 }
 
 static void
