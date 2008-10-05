@@ -3,8 +3,12 @@ lib_LTLIBRARIES = libgx-@GX_MAJOR_VERSION@.@GX_MINOR_VERSION@.la
 EXTENSION_XML = xproto.xml
 # FIXME
 #EXTENSION_XML += bigreq.xml
-#EXTENSION_XML += shape.xml
-#EXTENSION_XML += render.xml
+if BUILD_SHAPE
+EXTENSION_XML += shape.xml
+endif
+if BUILD_RENDER
+EXTENSION_XML += render.xml
+endif
 ## depends on shape + render
 #EXTENSION_XML += xfixes.xml
 ## depends on fixes
@@ -27,14 +31,37 @@ EXTENSION_XML = xproto.xml
 ##EXTENSION_XML += xvmc.xml
 ##EXTENSION_XML += xv.xml
 
+# Generate this list via:
+# find ./ -iname 'gx-*-gen.*' |cut -d'/' -f2|xargs printf '\t%s \\\n'
+GENERATED_CODE = \
+        gx-window-gen.c \
+        gx-protocol-error-codes-gen.h \
+        gx-gcontext-gen.c \
+        gx-xcb-dependencies-gen.h \
+        gx-connection-gen.c \
+        gx-protocol-error-details-gen.h \
+        gx-pixmap-gen.c \
+        gx-connection-gen.h \
+        gx-drawable-gen.c \
+        gx-pixmap-gen.h \
+        gx-drawable-gen.h \
+        gx-window-gen.h \
+        gx-gcontext-gen.h \
+        gx-tests-gen.c \
+        gx-cookie-gen.h
 
-.PHONY: generated-code
-BUILT_SOURCES=generated-code
-#BUILT_SOURCES=gx-connection-gen.c
-#gx-connection-gen.c: $(top_builddir)/tools/gx-gen
-generated-code: $(EXTENSION_XML)
+$(GENERATED_CODE): $(EXTENSION_XML) $(top_builddir)/tools/gx-gen
+	echo "generating $@"
 	$(top_builddir)/tools/gx-gen $(EXTENSION_XML)
-#	$(top_srcdir)/tools/post_process.sh
+BUILT_SOURCES = $(GENERATED_CODE)
+
+#.PHONY: generated-code
+#BUILT_SOURCES=generated-code
+##BUILT_SOURCES=gx-connection-gen.c
+##gx-connection-gen.c: $(top_builddir)/tools/gx-gen
+#generated-code: $(EXTENSION_XML)
+#	$(top_builddir)/tools/gx-gen $(EXTENSION_XML)
+##	$(top_srcdir)/tools/post_process.sh
 
 #libgx_@GX_MAJOR_VERSION@_@GX_MINOR_VERSION@_la_SOURCES = \
 #gx-connection.c gx-drawable.c gx-pixmap.c gx-window.c

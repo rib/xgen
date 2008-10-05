@@ -3,7 +3,7 @@
 
 #include <glib.h>
 
-#include <xcb/xcb.h>
+#include <gx/gx-xcb-dependencies-gen.h>
 
 #define GX_PROTOCOL_ERROR gx_protocol_error_quark ()
 

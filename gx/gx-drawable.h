@@ -33,7 +33,7 @@
 #include <glib.h>
 #include <glib-object.h>
 
-#include <xcb/xcb.h>
+#include <gx/gx-xcb-dependencies-gen.h>
 
 G_BEGIN_DECLS
 #define GX_DRAWABLE(obj)		  (G_TYPE_CHECK_INSTANCE_CAST ((obj), GX_TYPE_DRAWABLE, GXDrawable))

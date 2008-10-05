@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
+#include "test-gx-common.h"
+
 /* This is just to try and catch a silly mistake with the internal ref counting
  * of cookies, since it's expected that a lot of cookies will be created and
  * destroyed over the lifetime of a program.
@@ -67,7 +69,7 @@ query_tree_reply_handler (GXCookie *self,
 			  const GParamSpec *pspec,
 			  gpointer user_data)
 {
-  GXQueryTreeReply *query_tree;
+  GXWindowQueryTreeReply *query_tree;
 
   query_tree = gx_window_query_tree_reply (self, NULL);
   /* SNIP processing the reply */
@@ -79,15 +81,16 @@ query_tree_reply_handler (GXCookie *self,
   gx_main_quit ();
 }
 
-int
-main(int argc, char **argv)
+void
+test_cookie_life_cycle (TestGXSimpleFixture *fixture,
+			gconstpointer data)
 {
   GXConnection *connection;
   GXWindow *root;
   GXCookie *cookie0;
   GXCookie *cookie1;
   GXCookie *cookie2;
-  GXQueryTreeReply *query_tree;
+  GXWindowQueryTreeReply *query_tree;
   int error = 0;
 
   g_type_init ();
@@ -96,7 +99,7 @@ main(int argc, char **argv)
   if (gx_connection_has_error (connection))
     {
       g_printerr ("Error establishing connection to X server");
-      return 1;
+      exit (1);
     }
 
   root = gx_connection_get_root_window (connection);
@@ -140,8 +143,6 @@ main(int argc, char **argv)
   error |= check_cookies_2_status ();
 
   if (error)
-    return EXIT_FAILURE;
-  else
-    return EXIT_SUCCESS;
+    exit (1);
 }
 

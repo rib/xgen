@@ -1,7 +1,6 @@
 
-#include "gx-protocol-error.h"
+#include <gx/gx-protocol-error.h>
 
-#include <xcb/xcb.h>
 #include <glib.h>
 
 

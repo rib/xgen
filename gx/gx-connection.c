@@ -32,7 +32,6 @@
 
 #include <glib.h>
 
-#include <xcb/xcb.h>
 #include <xcb/xcbext.h>
 #include <stdlib.h>
 #include <string.h>
@@ -51,43 +50,6 @@ enum {
 enum {
     PROP_0,
     PROP_DISPLAY,
-};
-
-struct _GXConnectionPrivate
-{
-  xcb_connection_t  *xcb_connection;
-
-  gchar		*display;
-  int		 screen_num;
-  xcb_screen_t	*screen;
-  GXWindow	*root;
-
-  guint		 xcb_source_id;
-
-  /* While cookies are registered with a connection they are in
-   * one of the the two following lists. */
-
-  /** The list of cookies for which no reply/error has yet been
-   * recieved
-   */
-  GQueue	*pending_reply_cookies;
-
-  /** The list of cookies for which a reply has been recieved
-   * but they are still registered and owned by the connection */
-  GQueue	*zombie_reply_cookies;
-
-  /* Events, replies and errors are queued up when retrieving them
-   * from XCB so they may be dispatched one at a time from a custom
-   * GSource to ensure the mainloop remains interactive. */
-  GQueue	*events_queue;
-  GQueue	*response_queue;
-#if 0
-  GQueue	*replies_queue;
-  GQueue	*errors_queue;
-#endif
-
-  /** Indicates that connecting to the X server failed. */
-  gboolean	 has_error;
 };
 
 typedef struct
@@ -116,6 +78,45 @@ typedef struct _XCBResponseData
   void		  *data;
 } XCBResponseData;
 
+struct _GXConnectionPrivate
+{
+  xcb_connection_t  *xcb_connection;
+
+  gchar		*display;
+  int		 screen_num;
+  xcb_screen_t	*screen;
+  GXWindow	*root;
+
+  guint		 xcb_source_id;
+  GXXCBFDSource *xcb_source;
+
+  /* While cookies are registered with a connection they are in
+   * one of the the two following lists. */
+
+  /** The list of cookies for which no reply/error has yet been
+   * recieved
+   */
+  GQueue	*pending_reply_cookies;
+
+  /** The list of cookies for which a reply has been recieved
+   * but they are still registered and owned by the connection */
+  GQueue	*zombie_reply_cookies;
+
+  /* Events, replies and errors are queued up when retrieving them
+   * from XCB so they may be dispatched one at a time from a custom
+   * GSource to ensure the mainloop remains interactive. */
+  GQueue	*events_queue;
+  GQueue	*response_queue;
+#if 0
+  GQueue	*replies_queue;
+  GQueue	*errors_queue;
+#endif
+
+  /** Indicates that connecting to the X server failed. */
+  gboolean	 has_error;
+};
+
+
 /* Function definitions */
 static void gx_connection_get_property (GObject *object,
 					guint id,
@@ -132,7 +133,7 @@ static void gx_connection_mydoable_interface_init (gpointer interface,
 static void connect_to_display (GXConnection *self, const char *display);
 void gx_connection_dispose (GObject *object);
 static void gx_connection_finalize (GObject *self);
-
+static void disconnect_from_display (GXConnection *self);
 
 static guint gx_connection_signals[LAST_SIGNAL] = { 0 };
 
@@ -288,6 +289,9 @@ gx_connection_finalize (GObject *object)
 {
   GXConnection *self = GX_CONNECTION (object);
 
+  if (self->priv->xcb_connection)
+    disconnect_from_display (self);
+
   g_queue_free (self->priv->events_queue);
   g_queue_free (self->priv->response_queue);
   g_queue_free (self->priv->pending_reply_cookies);
@@ -394,8 +398,8 @@ check_for_any_reply_or_error (GXConnection *self,
     gx_connection_get_xcb_connection (self);
   GList *tmp;
 
-  g_return_val_if_fail (*reply == NULL, NULL);
-  g_return_val_if_fail (*error == NULL, NULL);
+  g_return_val_if_fail (reply && *reply == NULL, NULL);
+  g_return_val_if_fail (error && *error == NULL, NULL);
 
   for (tmp = self->priv->pending_reply_cookies->head;
        tmp != NULL;
@@ -409,7 +413,7 @@ check_for_any_reply_or_error (GXConnection *self,
 #error "this way mean we can't then call xcb_blah_reply(xcb_cookie) to get the same pointer?"
 #error "I guess not. Can we perhaps push the reply/error back in to xcb if not?"
 #endif
-      if (reply || error)
+      if (*reply || *error)
 	{
 	  g_queue_remove (self->priv->pending_reply_cookies,
 			  cookie);
@@ -599,7 +603,11 @@ xcb_event_dispatch (GSource *source, GSourceFunc callback, gpointer data)
       if (response->type == _GX_COOKIE_RESPONSE_TYPE_REPLY)
 	gx_cookie_set_reply (response->cookie, response->data);
       else
-	gx_cookie_set_error (response->cookie, response->data);
+	{
+	  /* FIXME - DEBUG */
+	  g_print ("calling gx_cookie_set_error\n");
+	  gx_cookie_set_error (response->cookie, response->data);
+	}
       g_slice_free (XCBResponseData, response);
       return TRUE;
     }
@@ -640,6 +648,14 @@ add_xcb_event_source(GXConnection *self)
   g_source_add_poll (source, &xcb_source->xcb_poll_fd);
   g_source_set_can_recurse (source, TRUE);
   self->priv->xcb_source_id = g_source_attach (source, NULL);
+  self->priv->xcb_source = xcb_source;
+}
+
+static void
+remove_xcb_event_source (GXConnection *self)
+{
+  g_source_remove (self->priv->xcb_source_id);
+  g_source_unref ((GSource *)self->priv->xcb_source);
 }
 
 static void
@@ -654,6 +670,10 @@ connect_to_display (GXConnection *self, const char *display)
   if (xcb_connection_has_error (self->priv->xcb_connection))
     {
       self->priv->has_error = TRUE;
+      /* NB: In this error condition, the xcb_connection_t returned
+       * by xcb is actually a cast static int, so we dont need to
+       * free anything. */
+      self->priv->xcb_connection = NULL;
     }
   else
     {
@@ -674,6 +694,16 @@ connect_to_display (GXConnection *self, const char *display)
 
       add_xcb_event_source (self);
     }
+}
+
+static void
+disconnect_from_display (GXConnection *self)
+{
+  g_return_if_fail (self->priv->xcb_connection != NULL);
+
+  remove_xcb_event_source (self);
+
+  xcb_disconnect (self->priv->xcb_connection);
 }
 
 GXWindow *

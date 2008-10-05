@@ -1,0 +1,38 @@
+GX is an API built on top of the XCB API which isn't so raw, is object orientated and is a tiny bit more liberal about utility code; just not libX11 liberal.
+
+Like XCB, GX is all auto generated based on the XCB XML protocol specs.
+
+Brief comparison with XCB:
+
+Object orientated:
+- Connection
+- Screen
+- Drawable
+  - Window
+  - Pixmaps
+- GContext
+- Cookie
+
+
+Signal based event delivery.
+
+Get notification signals from cookies when replies/errors have been received from the server.
+
+Less emphasis on multi threading support, mor on on single threaded mainloop based event dispatching.
+
+GErrors for all X protocol errors.
+
+The recommended way to use GX is to take advantage of the cookie reply notifications so your programs dont need to block waiting for responses, but GX also provides a very convenient synchronous API too. This should be easier to port xlib code too than directly to XCB, and is useful for writting easy to read utilities where performance is a non-issue.
+
+The GX API passes struct types by-ref instead of by-value.
+
+GXMaskValueItem provides some safeguards for setting up value-mask and value-list data which is fairly error prone when using raw XCB.
+- Though it might be worth going further and generating well typed structs if possible.
+
+TODO
+Bindings for Python
+Bindings for Ruby
+Bindings for Vala
+Bindings for C++ (gtkmm style)
+Bindings for C++ (QT style)
+

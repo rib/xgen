@@ -1,18 +1,50 @@
-noinst_PROGRAMS = \
-	test-connection \
-	test-reply \
-	test-async-reply \
-	test-events \
-	test-cookie-life-cycle
+noinst_PROGRAMS = test-gx
 
-INCLUDES = -I$(top_srcdir)/ -I$(top_srcdir)/gx -I$(top_builddir)/gx
-LDADD = @GX_DEP_LIBS@ $(top_builddir)/gx/libgx-@GX_MAJOR_VERSION@.@GX_MINOR_VERSION@.la
-AM_CFLAGS = @EXTRA_CFLAGS@ @GX_DEP_CFLAGS@
-#AM_LDFLAGS =
+test_gx_SOURCES = \
+	test-gx-main.c \
+	test-gx-common.c \
+	test-gx-common.h \
+	\
+	test-connection.c \
+	test-reply.c \
+	test-async-reply.c \
+	test-cookie-life-cycle.c
 
-test_connection_SOURCES = test-connection.c
-test_reply_SOURCES = test-reply.c
-test_async_reply_SOURCES = test-async-reply.c
-test_events_SOURCES = test-events.c
-test_cookie_life_cycle_SOURCES = test-cookie-life-cycle.c
+# For convenience, this provides a way to easily run individual unit tests:
+.PHONY: wrappers
+wrappers: test-gx
+	for i in `./test-gx -l`; \
+	do \
+		ln -sf $(top_srcdir)/tests/wrapper.sh "`basename $$i`_wrap.sh"; \
+	done
+# NB: BUILT_SOURCES here a misnomer. We aren't building source, just inserting
+# a phony rule that will generate symlink scripts for running individual tests
+BUILT_SOURCES = wrappers
+	
+test_gx_CFLAGS = \
+	-I$(top_srcdir)/ \
+	-I$(top_srcdir)/gx \
+	-I$(top_builddir)/gx \
+	@EXTRA_CFLAGS@ \
+	@GX_DEP_CFLAGS@
+test_gx_LDADD = @GX_DEP_LIBS@ $(top_builddir)/gx/libgx-@GX_MAJOR_VERSION@.@GX_MINOR_VERSION@.la
+
+.PHONY: test test-report
+test:
+	gtester -o=test-gx-results.xml ./test-gx
+
+test-report:
+	gtester -o=test-gx-results.xml -k ./test-gx \
+	  && gtester-report test-gx-results.xml > test-gx-results.html \
+	  && gnome-open ./test-gx-results.html
+
+full-report:
+	gtester -o=test-gx-results.xml -k -m=slow ./test-gx \
+	  && gtester-report test-gx-results.xml > test-gx-results.html \
+	  && gnome-open ./test-gx-results.html
+
+EXTRA_DIST = ADDING_NEW_TESTS
+
+clean-local:
+	rm -f *_wrap.sh
 

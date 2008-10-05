@@ -27,7 +27,6 @@
 #include <gx/gx-gcontext.h>
 #include <gx/gx-protocol-error.h>
 
-#include <xcb/xcb.h>
 #include <string.h>
 
 #define GX_DRAWABLE_GET_PRIVATE(object)(G_TYPE_INSTANCE_GET_PRIVATE ((object), GX_TYPE_DRAWABLE, GXDrawablePrivate))

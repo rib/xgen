@@ -1,0 +1,24 @@
+
+How:
+----
+
+You should including the following at the top of your new unit test:
+#include "test-gx-common.h"
+
+Instead of a main () function add an entry point with a prototype as follows:
+
+void
+test_blah (TestGXSimpleFixture *fixture,
+           gconstpointer data)
+{
+
+}
+
+Add a TEST_CONFORM_SIMPLE() entry in test-conform-main.c
+
+
+Notes:
+------
+
+NB: A test fails if it exists. (regardless of the exist status)
+

@@ -29,7 +29,7 @@
 #include <glib.h>
 #include <glib-object.h>
 
-#include <xcb/xcb.h>
+#include <gx/gx-xcb-dependencies-gen.h>
 
 G_BEGIN_DECLS
 

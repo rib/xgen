@@ -2,69 +2,46 @@
 #include <gx.h>
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 
-int
-main(int argc, char **argv)
+#include "test-gx-common.h"
+
+void
+test_connection (TestGXSimpleFixture *fixture,
+		 gconstpointer data)
 {
   GXConnection *connection;
-  GXWindow *root;
-  GXWindow *window;
 
   g_type_init();
 
   connection = gx_connection_new (NULL);
 
-  /* I don't think it's standard practice to allow gobject initialisation
-   * to fail by returning a NULL pointer, which I think I would have
-   * otherwise prefered as my the mechanism for detecting error.
+  /* gobject initialisation can't fail by returning a NULL pointer, which
+   * would otherwise been a neater mechanism for detecting an error.
    *
-   * Instead we copy the XCB approach.
+   * Instead we copy the XCB style:
    */
   if (gx_connection_has_error (connection))
     {
       g_printerr ("Error establishing connection to X server");
-      return 1;
+      exit (1);
     }
-
-  root = gx_connection_get_root_window (connection);
-
-  /* Note window creation via the gx_window_new function has a very
-   * simplified interface, that can hopefully be used 99% of the
-   * time.
-   *
-   * If for example you need to set the window border you can either
-   * use gx_window_change_window_attributes(), or to gain access to
-   * _all_ create window parameters you can use:
-   *
-   *  g_object_new (GX_TYPE_WINDOW,...)
-   *		    "connection", connection,
-   *		    "parent", parent,
-   *		    ...,
-   *		    NULL);
-   *
-   * which has a full range of construct only properties
-   */
-  window = gx_window_new (connection,
-			  root, /* parent */
-			  0, /* x */
-			  0, /* y */
-			  300, /* width */
-			  300, /* height */
-			  0 /* event mask */
-			  );
-
-  gx_window_map_window (window, NULL);
-
-  gx_connection_flush (connection, FALSE);
-
-  g_print ("Hello World\n");
-  g_print ("Sleeping for 5 seconds...\n");
-  sleep (5);
-
-  g_object_unref (root);
   g_object_unref (connection);
 
-  return 0;
+  /* Now make sure the error paths work: */
+  connection = gx_connection_new (":1000");
+
+  if (!gx_connection_has_error (connection))
+    {
+      g_printerr ("Failed to detect error "
+		  "when connecting to non existant server");
+      exit (1);
+    }
+  g_object_unref (connection);
+
+  g_print ("OK\n");
+
+  return;
 }
 

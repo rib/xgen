@@ -2,15 +2,19 @@
 #include <gx.h>
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 
-int
-main(int argc, char **argv)
+#include "test-gx-common.h"
+
+void
+test_events (TestGXSimpleFixture *fixture,
+             gconstpointer data)
 {
   GXConnection *connection;
   GXWindow *root;
   GXWindow *window;
-  GXQueryTreeReply *query_tree;
+  GXWindowQueryTreeReply *query_tree;
   GArray *array;
   GXWindow **children;
   GXWindow *child;
@@ -30,7 +34,7 @@ main(int argc, char **argv)
   if (gx_connection_has_error (connection))
     {
       g_printerr ("Error establishing connection to X server");
-      return 1;
+      exit (1);
     }
 
   root = gx_connection_get_root_window (connection);

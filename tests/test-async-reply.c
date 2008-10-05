@@ -2,15 +2,19 @@
 #include <gx.h>
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
 
-int
-main(int argc, char **argv)
+#include "test-gx-common.h"
+
+void
+test_async_reply (TestGXSimpleFixture *fixture,
+		  gconstpointer data)
 {
   GXConnection *connection;
   GXWindow *root;
   GXCookie *cookie;
-  GXQueryTreeReply *query_tree;
+  GXWindowQueryTreeReply *query_tree;
   GArray *array;
   GXWindow **children;
   GXWindow *child;
@@ -22,7 +26,7 @@ main(int argc, char **argv)
   if (gx_connection_has_error (connection))
     {
       g_printerr ("Error establishing connection to X server");
-      return 1;
+      exit (1);
     }
 
   root = gx_connection_get_root_window (connection);
@@ -45,6 +49,10 @@ main(int argc, char **argv)
   gx_window_query_tree_free_children (array);
 
   gx_window_query_tree_reply_free (query_tree);
+
+  /* FIXME - this test currently just tests things dont crash when issuing a
+   * request and waiting for a reply. This test should actually verify the
+   * value of some reply is correct */
 
   g_object_unref (root);
   g_object_unref (connection);

@@ -28,7 +28,6 @@
 #include <gx/gx-connection.h>
 #include <gx/gx-protocol-error.h>
 
-#include <xcb/xcb.h>
 #include <string.h>
 
 /* Macros and defines */
@@ -39,7 +38,6 @@
 enum
 {
   EVENT_SIGNAL,
-#include "gx-window-signals-enum-gen.h"
   LAST_SIGNAL
 };
 
@@ -299,8 +297,6 @@ gx_window_class_init (_GXWindowClass * klass)	/* Class Initialization */
 		  0 /* number of parameters */
 		  /* vararg, list of param types */
     );
-
-#include "gx-window-new-signals-gen.c"
 
   g_type_class_add_private (klass, sizeof (GXWindowPrivate));
 }
