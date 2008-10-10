@@ -38,51 +38,218 @@ typedef enum
   /* Basic composite types */
   XGEN_STRUCT,
   XGEN_UNION,
-  XGEN_ENUM,
   XGEN_XIDUNION,
+  XGEN_ENUM,
 
   /* Type definitions */
   XGEN_TYPEDEF,
 
-  /* Protocol types */
+  /* Protocol data types */
   XGEN_REQUEST,
-  XGEN_EVENT,
   XGEN_VALUEPARAM,
+  XGEN_REPLY,
+  XGEN_EVENT,
   XGEN_ERROR
-  /* XGEN_LIST */
 } XGenType;
 
+typedef struct
+{
+  char	*name;
+  char  *header;
+
+  GList *base_types;
+  GList *structs;
+  GList *unions;
+  GList *xid_unions;
+  GList *enums;
+  GList *typedefs;
+  GList *requests;
+  GList *replys;
+  GList *errors;
+  GList *events;
+
+  GList *all_definitions;
+} XGenExtension;
 
 typedef struct _XGenDefinition XGenDefinition;
 struct _XGenDefinition
 {
-  char *name;
-  XGenType type;
+  const XGenExtension *extension;
+  XGenType	       type;
+  char		      *name;
 
-  /* Really FIXME: Put the following into seperate typedefs
-   * and create a union: */
-
-  /* Base types */
-  unsigned int size;
-
-  union {
-    /* STRUCT / UNION / XIDUNION / REQUEST / EVENT / ERROR */
-    GList *fields;
-
-    /* ENUM */
-    GList *items;
-  };
-
-  /* XGEN_TYPEDEF / XGEN_VALUEPARAM */
-  XGenDefinition *reference;
-
-  /* XGEN_REQUEST */
-  GList *reply_fields;
-
-  /* XGEN_VALUEPARAM */
-  gchar *mask_name;
-  gchar *list_name;
+  void		      *_private; /* application private data */
 };
+/**
+ * Casts a specific definition into a generic definition
+ */
+#define XGEN_DEF(DEF) ((XGenDefinition *)(DEF))
+
+/**
+ * Describes a base type such as CARD8
+ */
+typedef struct
+{
+  XGenDefinition   _parent;
+
+  unsigned int	   size;
+} XGenBaseType;
+/**
+ * Casts a generic definition into a base type definition
+ */
+#define XGEN_BASE_TYPE_DEF(DEF) ((XGenBaseType *)(DEF))
+
+/**
+ * Describes a basic struct
+ */
+typedef struct
+{
+  XGenDefinition   _parent;
+
+  GList		  *fields;
+} XGenStruct;
+/**
+ * Casts a generic definition into a struct definition
+ */
+#define XGEN_STRUCT_DEF(DEF) ((XGenStruct *)(DEF))
+
+/**
+ * Describes a basic union
+ */
+typedef struct
+{
+  XGenDefinition   _parent;
+
+  GList		  *fields;
+} XGenUnion;
+/**
+ * Casts a generic definition into a union definition
+ */
+#define XGEN_UNION_DEF(DEF) ((XGenUnion *)(DEF))
+
+/**
+ * Describes a basic enum
+ */
+typedef struct
+{
+  XGenDefinition   _parent;
+
+  GList		  *items;
+} XGenEnum;
+/**
+ * Casts a generic definition into an enum definition
+ */
+#define XGEN_ENUM_DEF(DEF) ((XGenEnum *)(DEF))
+
+/**
+ * Describes an XID union
+ */
+typedef struct
+{
+  XGenDefinition   _parent;
+
+  GList		  *fields;
+} XGenXIDUnion;
+/**
+ * Casts a generic definition into an XID union definition
+ */
+#define XGEN_XID_UNION_DEF(DEF) ((XGenXIDUnion *)(DEF))
+
+/**
+ * Describes an simple typedef
+ */
+typedef struct
+{
+  XGenDefinition   _parent;
+
+  XGenDefinition  *reference;
+} XGenTypedef;
+/**
+ * Casts a generic definition into a typedef definition
+ */
+#define XGEN_TYPEDEF_DEF(DEF) ((XGenTypedef *)(DEF))
+
+/**
+ * Describes a value param
+ */
+typedef struct
+{
+  XGenDefinition   _parent;
+
+  XGenDefinition  *reference; /* TODO: rename as 'type' */
+  gchar		  *mask_name;
+  gchar		  *list_name;
+} XGenValueParam;
+/**
+ * Casts a generic definition into a value param definition
+ */
+#define XGEN_VALUE_PARAM_DEF(DEF) ((XGenValueParam *)(DEF))
+
+/**
+ * Describes an X reply
+ */
+typedef struct
+{
+  XGenDefinition   _parent;
+
+  unsigned char	   opcode;
+  GList		  *fields;
+} XGenReply;
+/**
+ * Casts a generic definition into a reply definition
+ */
+#define XGEN_REPLYDEF(DEF) ((XGenReply *)(DEF))
+
+/**
+ * Describes an X request
+ */
+typedef struct
+{
+  XGenDefinition   _parent;
+
+  unsigned char	   opcode;
+  GList		  *fields;
+  XGenReply	  *reply;
+} XGenRequest;
+/**
+ * Casts a generic definition into a request definition
+ */
+#define XGEN_REQUEST_DEF(DEF) ((XGenRequest *)(DEF))
+
+/**
+ * Describes an X event
+ */
+typedef struct
+{
+  XGenDefinition   _parent;
+
+  unsigned char	   number;
+  GList		  *fields;
+  gboolean	   is_copy; /* If true then the fields are owned by another
+			       XGenEvent */
+} XGenEvent;
+/**
+ * Casts a generic definition into an event definition
+ */
+#define XGEN_EVENT_DEF(DEF) ((XGenEvent *)(DEF))
+
+/**
+ * Describes an X error
+ */
+typedef struct
+{
+  XGenDefinition   _parent;
+
+  unsigned char	   number;
+  GList *fields;
+  gboolean	   is_copy; /* If true then the fields are owned by another
+			       XGenError */
+} XGenError;
+/**
+ * Casts a generic definition into an error definition
+ */
+#define XGEN_ERROR_DEF(DEF) ((XGenError *)(DEF))
+
 
 typedef enum
 {
@@ -122,7 +289,7 @@ typedef struct
 {
   char *name;
   XGenDefinition *definition;
-  XGenExpression *length;      /* List length; NULL for non-list */
+  XGenExpression *length;      /* List length. NULL for non-list */
 } XGenFieldDefinition;
 
 typedef struct
@@ -154,93 +321,34 @@ typedef struct
 
 typedef struct
 {
-  char	*name;
-  char  *header;
-  GList *definitions;
-  GList *requests;
-  GList *events;
-  GList *errors;
-} XGenExtension;
-
-/* Concrete definitions for opaque and private structure types. */
-typedef struct
-{
-  XGenExtension	  *extension;
-  unsigned char	   opcode;
-  XGenDefinition  *definition;
-} XGenRequest;
-
-typedef struct
-{
-  XGenExtension	  *extension;
-  unsigned char	   number;
-  XGenDefinition  *definition;
-} XGenEvent;
-
-typedef struct
-{
-  XGenExtension	  *extension;
-  unsigned char	   number;
-  XGenDefinition  *definition;
-} XGenError;
-
-typedef struct
-{
   gboolean   host_is_little_endian;
-  GList	    *definitions;
   GList	    *extensions;
 } XGenState;
 
-static const XGenDefinition core_type_definitions[] = {
-  {
-    .name = "void",
-    .type = XGEN_VOID,
-    .size = 0},
-  {
-    .name = "char",
-    .type = XGEN_CHAR,
-    .size = 1},
-  {
-    .name = "float",
-    .type = XGEN_FLOAT,
-    .size = 4},
-  {
-    .name = "double",
-    .type = XGEN_DOUBLE,
-    .size = 8},
-  {
-    .name = "BOOL",
-    .type = XGEN_BOOLEAN,
-    .size = 1},
-  {
-    .name = "BYTE",
-    .type = XGEN_UNSIGNED,
-    .size = 1},
-  {
-    .name = "CARD8",
-    .type = XGEN_UNSIGNED,
-    .size = 1},
-  {
-    .name = "CARD16",
-    .type = XGEN_UNSIGNED,
-    .size = 2},
-  {
-    .name = "CARD32",
-    .type = XGEN_UNSIGNED,
-    .size = 4},
-  {
-    .name= "INT8",
-    .type = XGEN_SIGNED,
-    .size = 1},
-  {
-    .name = "INT16",
-    .type = XGEN_SIGNED,
-    .size = 2},
-  {
-    .name = "INT32",
-    .type = XGEN_SIGNED,
-    .size = 4}
+
+#define BASE_TYPE(NAME, TYPE, SIZE) \
+  { \
+   ._parent = { \
+      .name = NAME, \
+      .type = TYPE \
+    }, \
+    .size = SIZE \
+  }
+static const XGenBaseType core_type_definitions[] = {
+  BASE_TYPE("void", XGEN_VOID, 0),
+  BASE_TYPE("char", XGEN_CHAR, 1),
+  BASE_TYPE("float", XGEN_FLOAT, 4),
+  BASE_TYPE("double", XGEN_DOUBLE, 8),
+  BASE_TYPE("BOOL", XGEN_BOOLEAN, 1),
+  BASE_TYPE("BYTE", XGEN_UNSIGNED, 1),
+  BASE_TYPE("CARD8", XGEN_UNSIGNED, 1),
+  BASE_TYPE("CARD16", XGEN_UNSIGNED, 2),
+  BASE_TYPE("CARD32", XGEN_UNSIGNED, 4),
+  BASE_TYPE("INT8", XGEN_SIGNED, 1),
+  BASE_TYPE("INT16", XGEN_SIGNED, 2),
+  BASE_TYPE("INT32", XGEN_SIGNED, 4)
 };
+#undef BASE_TYPE
 
 struct _TypeMapping
 {
@@ -447,6 +555,25 @@ typedef struct _GXGenOutputContext
 } GXGenOutputContext;
 
 
+#if 0
+/**
+ * A wrapper for allocating an XGenDefinition, so we have single
+ * place to do common initialisation
+ */
+#define NEW_DEFINITION(TYPE) ((TYPE *)alloc_xgen_definition (sizeof (TYPE)))
+static XGenDefinition *
+alloc_xgen_definition (size_t size)
+{
+  XGenDefinition *def;
+
+  g_assert (size > sizeof (XGenDefinition));
+
+  def = g_malloc0 (size);
+
+  def->extension = extension;
+  return def
+}
+#endif
 
 /* Helper function to avoid casting. */
 static char *
@@ -482,7 +609,7 @@ xgen_find_type_in_extension (XGenExtension *extension, char *type_name)
 {
   GList *tmp;
 
-  for (tmp = extension->definitions; tmp != NULL; tmp = tmp->next)
+  for (tmp = extension->all_definitions; tmp != NULL; tmp = tmp->next)
     {
       XGenDefinition *def = tmp->data;
 
@@ -526,7 +653,7 @@ xgen_find_type (XGenState * state, char *name)
        tmp = tmp->next)
     {
       XGenExtension *extension = tmp->data;
-      if (strcmp (extension->name, extension_name) == 0)
+      if (strcmp (extension->header, extension_name) == 0)
 	{
 	  XGenDefinition *def =
 	    xgen_find_type_in_extension (extension, type_name);
@@ -606,7 +733,9 @@ xgen_parse_expression (XGenState * state, xmlNode * elem)
 }
 
 static GList *
-xgen_parse_field_elements (XGenState * state, xmlNode * elem)
+xgen_parse_field_elements (XGenState * state,
+			   XGenDefinition *definition,
+			   xmlNode * elem)
 {
   xmlNode *cur;
   GList *fields = NULL;
@@ -628,21 +757,28 @@ xgen_parse_field_elements (XGenState * state, xmlNode * elem)
       else if (strcmp (xgen_xml_get_node_name (cur), "field") == 0)
 	{
 	  field->name = strdup (xgen_xml_get_prop (cur, "name"));
-	  field->definition = xgen_find_type (state,
-						xgen_xml_get_prop (cur,
-								     "type"));
+	  field->definition =
+	    xgen_find_type (state,
+			    xgen_xml_get_prop (cur, "type"));
 	}
       else if (strcmp (xgen_xml_get_node_name (cur), "list") == 0)
 	{
 	  /* FIXME - we shouldn't loose fact that these fields belong
 	   * to a list*/
 	  field->name = strdup (xgen_xml_get_prop (cur, "name"));
-	  field->definition = xgen_find_type (state,
-						xgen_xml_get_prop (cur,
-								     "type"));
+	  field->definition =
+	    xgen_find_type (state,
+			    xgen_xml_get_prop (cur, "type"));
 	  if (cur->children)
 	    {
 	      field->length = xgen_parse_expression (state, cur->children);
+	    }
+	  else if (definition->type == XGEN_REPLY)
+	    {
+	      XGenExpression *exp = g_new0 (XGenExpression, 1);
+	      exp->type = XGEN_FIELDREF;
+	      exp->field = g_strdup ("length");
+	      field->length = exp;
 	    }
 	  else
 	    {
@@ -663,19 +799,24 @@ xgen_parse_field_elements (XGenState * state, xmlNode * elem)
 	}
       else if (strcmp (xgen_xml_get_node_name (cur), "valueparam") == 0)
 	{
-	  XGenDefinition *definition;
-	  field->name = g_strdup ("valueparam");
-	  definition = g_new0 (XGenDefinition, 1);
-	  definition->name = g_strdup ("valueparam");
-	  definition->type = XGEN_VALUEPARAM;
-	  definition->reference =
+	  XGenValueParam *valueparam = g_new0 (XGenValueParam, 1);
+	  XGenDefinition *def;
+
+	  def = XGEN_DEF (valueparam);
+	  def->extension = definition->extension;
+	  def->name = g_strdup ("valueparam");
+	  def->type = XGEN_VALUEPARAM;
+
+	  valueparam->reference =
 	    xgen_find_type (state,
 			      xgen_xml_get_prop (cur, "value-mask-type"));
-	  definition->mask_name =
+	  valueparam->mask_name =
 	    strdup (xgen_xml_get_prop (cur, "value-mask-name"));
-	  definition->list_name =
+	  valueparam->list_name =
 	    strdup (xgen_xml_get_prop (cur, "value-list-name"));
-	  field->definition = definition;
+
+	  field->name = g_strdup ("valueparam");
+	  field->definition = def;
 	}
       else
 	continue;
@@ -739,7 +880,9 @@ xgen_parse_item_elements (XGenState * state, xmlNode * elem)
 }
 
 static GList *
-xgen_parse_reply_fields (XGenState * state, xmlNode * elem)
+xgen_parse_reply_fields (XGenState * state,
+			 XGenDefinition *definition,
+			 xmlNode * elem)
 {
   xmlNode *cur;
   xmlNode *reply = NULL;
@@ -757,9 +900,8 @@ xgen_parse_reply_fields (XGenState * state, xmlNode * elem)
   if (!reply)
     return NULL;
 
-  return xgen_parse_field_elements (state, reply);
+  return xgen_parse_field_elements (state, definition, reply);
 }
-
 
 static void
 xgen_parse_xmlxcb_file (XGenState * state, char *filename)
@@ -802,38 +944,48 @@ xgen_parse_xmlxcb_file (XGenState * state, char *filename)
 
       /* Add definitions of core types. */
       for (i = 0;
-	   i < sizeof (core_type_definitions) / sizeof (XGenDefinition);
+	   i < sizeof (core_type_definitions) / sizeof (XGenBaseType);
 	   i++)
 	{
-	  XGenDefinition *temp = g_new0 (XGenDefinition, 1);
+	  XGenBaseType *base_type = g_new0 (XGenBaseType, 1);
+	  XGenDefinition *def = XGEN_DEF (base_type);
 
-	  *temp = core_type_definitions[i];
-	  temp->name = g_strdup (core_type_definitions[i].name);
+	  *base_type = core_type_definitions[i];
+	  def->name = g_strdup (core_type_definitions[i]._parent.name);
 
-	  state->definitions = g_list_prepend (state->definitions, temp);
-	  extension->definitions =
-	    g_list_prepend (extension->definitions, temp);
+	  g_assert (def->name);
+
+	  extension->all_definitions =
+	    g_list_prepend (extension->all_definitions, base_type);
+	  extension->base_types =
+	    g_list_prepend (extension->base_types, base_type);
 	}
     }
 
   for (elem = root->children;
        elem != NULL; elem = xgen_xml_next_elem (elem->next))
     {
+      /* Since most cases will result in a new XGenDefinition, we declare
+       * a pointer in this block so we can put some common code at the end
+       * that can fiddle with the definition. */
+      XGenDefinition *def = NULL;
 
       if (strcmp (xgen_xml_get_node_name (elem), "request") == 0)
 	{
-	  XGenRequest *request;
-	  XGenDefinition *def;
+	  XGenRequest *request = g_new0 (XGenRequest, 1);
 	  XGenFieldDefinition *field;
 	  XGenFieldDefinition *first_byte_field;
 	  GList *fields;
 	  int opcode = atoi (xgen_xml_get_prop (elem, "opcode"));
 
-	  def = g_new0 (XGenDefinition, 1);
+	  def = XGEN_DEF (request);
+	  def->extension = extension;
 	  def->name = g_strdup (xgen_xml_get_prop (elem, "name"));
 	  def->type = XGEN_REQUEST;
 
-	  fields = xgen_parse_field_elements (state, elem);
+	  request->opcode = opcode;
+
+	  fields = xgen_parse_field_elements (state, def, elem);
 	  if (!fields)
 	    {
 	      field = g_new0 (XGenFieldDefinition, 1);
@@ -852,11 +1004,20 @@ xgen_parse_xmlxcb_file (XGenState * state, char *filename)
 	  field->definition = xgen_find_type (state, "BYTE");
 	  fields = g_list_prepend (fields, field);
 
-	  def->fields = fields;
+	  request->fields = fields;
+	  extension->requests =
+	    g_list_prepend (extension->requests, request);
 
-	  fields = xgen_parse_reply_fields (state, elem);
+	  fields = xgen_parse_reply_fields (state, def, elem);
 	  if (fields)
 	    {
+	      XGenReply *reply = g_new0 (XGenReply, 1);
+	      XGenDefinition *reply_def = XGEN_DEF (reply);
+
+	      reply_def->extension = extension;
+	      reply_def->name = g_strdup (def->name);
+	      reply_def->type = XGEN_REPLY;
+
 	      /* FIXME: assert that sizeof(first_byte_field)==1 */
 	      first_byte_field = fields->data;
 	      fields = g_list_remove (fields, first_byte_field);
@@ -877,36 +1038,38 @@ xgen_parse_xmlxcb_file (XGenState * state, char *filename)
 	      field->name = g_strdup ("response_type");
 	      field->definition = xgen_find_type (state, "BYTE");
 	      fields = g_list_prepend (fields, field);
+
+	      reply->fields = fields;
+
+	      extension->replys =
+		g_list_prepend (extension->replys, reply);
+
+	      /* FIXME: NB this is duplicated below for non reply definitions
+	       * which is a bit yukky. */
+	      g_assert (reply_def->name);
+	      extension->all_definitions =
+		g_list_prepend (extension->all_definitions, reply_def);
+
+	      request->reply = reply;
 	    }
-
-	  def->reply_fields = fields;
-
-	  state->definitions = g_list_prepend (state->definitions, def);
-
-	  extension->definitions =
-	    g_list_prepend (extension->definitions, def);
-	  request = g_new0 (XGenRequest, 1);
-	  request->extension = extension;
-	  request->opcode = opcode;
-	  request->definition = def;
-	  extension->requests =
-	    g_list_prepend (extension->requests, request);
 	}
       else if (strcmp (xgen_xml_get_node_name (elem), "event") == 0)
 	{
-	  XGenEvent *event;
+	  XGenEvent *event = g_new0 (XGenEvent, 1);
 	  char *no_sequence_number;
-	  XGenDefinition *def;
 	  XGenFieldDefinition *field;
 	  XGenFieldDefinition *first_byte_field;
 	  GList *fields;
 	  int number = atoi (xgen_xml_get_prop (elem, "number"));
 
-	  def = g_new0 (XGenDefinition, 1);
+	  def = XGEN_DEF (event);
+	  def->extension = extension;
 	  def->name = g_strdup (xgen_xml_get_prop (elem, "name"));
 	  def->type = XGEN_EVENT;
 
-	  fields = xgen_parse_field_elements (state, elem);
+	  event->number = number;
+
+	  fields = xgen_parse_field_elements (state, def, elem);
 
 	  first_byte_field = fields->data;
 	  fields = g_list_remove (fields, first_byte_field);
@@ -928,57 +1091,47 @@ xgen_parse_xmlxcb_file (XGenState * state, char *filename)
 	  field->definition = xgen_find_type (state, "BYTE");
 	  fields = g_list_prepend (fields, field);
 
-	  def->fields = fields;
+	  event->fields = fields;
 
-	  state->definitions = g_list_prepend (state->definitions, def);
-
-	  extension->definitions =
-	    g_list_prepend (extension->definitions, def);
-	  event = g_new0 (XGenEvent, 1);
-	  event->extension = extension;
-	  event->number = number;
-	  event->definition = def;
 	  extension->events = g_list_prepend (extension->events, event);
 	}
       else if (strcmp (xgen_xml_get_node_name (elem), "eventcopy") == 0)
 	{
-	  XGenEvent *event;
-	  XGenDefinition *def;
+	  XGenEvent *event = g_new0 (XGenEvent, 1);
 	  int number = atoi (xgen_xml_get_prop (elem, "number"));
-	  XGenDefinition *copy_of;
+	  XGenEvent *copy_of;
 
-	  def = g_new0 (XGenDefinition, 1);
+	  def = XGEN_DEF (event);
+	  def->extension = extension;
 	  def->name = g_strdup (xgen_xml_get_prop (elem, "name"));
 	  def->type = XGEN_EVENT;
-	  /* NB: This isn't a very nice thing to be doing if we
-	   * are ever going to care about freeing resources!
-	   * We should deep copy the fields instead. */
-	  copy_of = xgen_find_type (state,
-				       xgen_xml_get_prop (elem, "ref"));
-	  def->fields = copy_of->fields;
 
-	  state->definitions = g_list_prepend (state->definitions, def);
-
-	  extension->definitions =
-	    g_list_prepend (extension->definitions, def);
-	  event = g_new0 (XGenEvent, 1);
-	  event->extension = extension;
 	  event->number = number;
-	  event->definition = def;
+
+	  copy_of =
+	    XGEN_EVENT_DEF (xgen_find_type (state,
+					    xgen_xml_get_prop (elem, "ref")));
+	  event->fields = copy_of->fields;
+	  /* So that we don't double free the fields: */
+	  event->is_copy = TRUE;
+
 	  extension->events = g_list_prepend (extension->events, event);
 	}
       else if (strcmp (xgen_xml_get_node_name (elem), "error") == 0)
 	{
-	  XGenDefinition *def = g_new0 (XGenDefinition, 1);
+	  XGenError *error = g_new0 (XGenError, 1);
 	  int number = atoi (xgen_xml_get_prop (elem, "number"));
 	  GList *fields;
 	  XGenFieldDefinition *field;
-	  XGenError *error;
 
+	  def = XGEN_DEF (error);
+	  def->extension = extension;
 	  def->name = g_strdup (xgen_xml_get_prop (elem, "name"));
 	  def->type = XGEN_ERROR;
 
-	  fields = xgen_parse_field_elements (state, elem);
+	  error->number = number;
+
+	  fields = xgen_parse_field_elements (state, def, elem);
 
 	  field = g_new0 (XGenFieldDefinition, 1);
 	  field->name = g_strdup ("response");
@@ -995,118 +1148,131 @@ xgen_parse_xmlxcb_file (XGenState * state, char *filename)
 	  field->definition = xgen_find_type (state, "CARD16");
 	  fields = g_list_prepend (fields, field);
 
-	  def->fields = fields;
+	  error->fields = fields;
 
-	  state->definitions = g_list_prepend (state->definitions, def);
-
-	  extension->definitions =
-	    g_list_prepend (extension->definitions, def);
-	  error = g_new0 (XGenError, 1);
-	  error->extension = extension;
-	  error->number = number;
-	  error->definition = def;
 	  extension->errors = g_list_prepend (extension->errors, error);
 	}
       else if (strcmp (xgen_xml_get_node_name (elem), "errorcopy") == 0)
 	{
-	  XGenError *error;
-	  XGenDefinition *def;
+	  XGenError *error = g_new0 (XGenError, 1);
 	  int number = atoi (xgen_xml_get_prop (elem, "number"));
-	  XGenDefinition *copy_of;
+	  XGenError *copy_of;
 
-	  def = g_new0 (XGenDefinition, 1);
+	  def = XGEN_DEF (error);
+	  def->extension = extension;
 	  def->name = g_strdup (xgen_xml_get_prop (elem, "name"));
 	  def->type = XGEN_ERROR;
-	  /* NB: This isn't a very nice thing to be doing if we
-	   * are ever going to care about freeing resources!
-	   * We should deep copy the fields instead. */
-	  copy_of = xgen_find_type (state,
-				     xgen_xml_get_prop (elem, "ref"));
-	  def->fields = copy_of->fields;
 
-	  state->definitions = g_list_prepend (state->definitions, def);
-
-	  extension->definitions =
-	    g_list_prepend (extension->definitions, def);
-	  error = g_new0 (XGenError, 1);
-	  error->extension = extension;
 	  error->number = number;
-	  error->definition = def;
+
+	  copy_of =
+	    XGEN_ERROR_DEF (xgen_find_type (state,
+					    xgen_xml_get_prop (elem, "ref")));
+	  error->fields = copy_of->fields;
+	  /* So that we don't double free the fields: */
+	  error->is_copy = TRUE;
+
 	  extension->errors = g_list_prepend (extension->errors, error);
 	}
       else if (strcmp (xgen_xml_get_node_name (elem), "struct") == 0)
 	{
-	  XGenDefinition *def = g_new0 (XGenDefinition, 1);
+	  XGenStruct *struct_def = g_new0 (XGenStruct, 1);
 
+	  def = XGEN_DEF (struct_def);
+	  def->extension = extension;
 	  def->name = g_strdup (xgen_xml_get_prop (elem, "name"));
 	  def->type = XGEN_STRUCT;
-	  def->fields = xgen_parse_field_elements (state, elem);
-	  state->definitions = g_list_prepend (state->definitions, def);
-	  extension->definitions =
-	    g_list_prepend (extension->definitions, def);
+
+	  struct_def->fields =
+	    xgen_parse_field_elements (state, def, elem);
+	  extension->structs =
+	    g_list_prepend (extension->structs, struct_def);
 	}
       else if (strcmp (xgen_xml_get_node_name (elem), "xidunion") == 0)
 	{
-	  XGenDefinition *def = g_new0 (XGenDefinition, 1);
+	  XGenXIDUnion *xid_union = g_new0 (XGenXIDUnion, 1);
 
+	  def = XGEN_DEF (xid_union);
+	  def->extension = extension;
 	  def->name = g_strdup (xgen_xml_get_prop (elem, "name"));
 	  def->type = XGEN_XIDUNION;
-	  def->fields = xgen_parse_field_elements (state, elem);
-	  state->definitions = g_list_prepend (state->definitions, def);
-	  extension->definitions =
-	    g_list_prepend (extension->definitions, def);
+
+	  xid_union->fields =
+	    xgen_parse_field_elements (state, def, elem);
+	  extension->xid_unions =
+	    g_list_prepend (extension->xid_unions, xid_union);
 	}
       else if (strcmp (xgen_xml_get_node_name (elem), "union") == 0)
 	{
-	  XGenDefinition *def = g_new0 (XGenDefinition, 1);
+	  XGenUnion *union_def = g_new0 (XGenUnion, 1);
 
+	  def = XGEN_DEF (union_def);
+	  def->extension = extension;
 	  def->name = g_strdup (xgen_xml_get_prop (elem, "name"));
 	  def->type = XGEN_UNION;
-	  def->fields = xgen_parse_field_elements (state, elem);
-	  state->definitions = g_list_prepend (state->definitions, def);
-	  extension->definitions =
-	    g_list_prepend (extension->definitions, def);
+
+	  union_def->fields =
+	    xgen_parse_field_elements (state, def, elem);
+	  extension->unions =
+	    g_list_prepend (extension->unions, union_def);
 	}
       else if (strcmp (xgen_xml_get_node_name (elem), "xidtype") == 0)
 	{
-	  XGenDefinition *def = g_new0 (XGenDefinition, 1);
+	  XGenBaseType *xid_def = g_new0 (XGenBaseType, 1);
 
+	  def = XGEN_DEF (xid_def);
+	  def->extension = extension;
 	  def->name = g_strdup (xgen_xml_get_prop (elem, "name"));
 	  def->type = XGEN_XID;
-	  def->size = 4;
-	  state->definitions = g_list_prepend (state->definitions, def);
-	  extension->definitions =
-	    g_list_prepend (extension->definitions, def);
+
+	  xid_def->size = 4;
+	  extension->base_types =
+	    g_list_prepend (extension->base_types, xid_def);
 	}
       else if (strcmp (xgen_xml_get_node_name (elem), "enum") == 0)
 	{
-	  XGenDefinition *def = g_new0 (XGenDefinition, 1);
+	  XGenEnum *enum_def = g_new0 (XGenEnum, 1);
+
+	  def = XGEN_DEF (enum_def);
+	  def->extension = extension;
 	  def->name = g_strdup (xgen_xml_get_prop (elem, "name"));
 	  def->type = XGEN_ENUM;
 
-	  def->items = xgen_parse_item_elements (state, elem);
-	  state->definitions = g_list_prepend (state->definitions, def);
-	  extension->definitions =
-	    g_list_prepend (extension->definitions, def);
+	  enum_def->items = xgen_parse_item_elements (state, elem);
+	  extension->enums =
+	    g_list_prepend (extension->enums, enum_def);
 	}
       else if (strcmp (xgen_xml_get_node_name (elem), "typedef") == 0)
 	{
-	  XGenDefinition *def = g_new0 (XGenDefinition, 1);
+	  XGenTypedef *typedef_def = g_new0 (XGenTypedef, 1);
 
+	  def = XGEN_DEF (typedef_def);
+	  def->extension = extension;
 	  def->name = g_strdup (xgen_xml_get_prop (elem, "newname"));
 	  def->type = XGEN_TYPEDEF;
-	  def->reference = xgen_find_type (state,
-				       xgen_xml_get_prop (elem, "oldname"));
-	  state->definitions = g_list_prepend (state->definitions, def);
-	  extension->definitions =
-	    g_list_prepend (extension->definitions, def);
+
+	  typedef_def->reference =
+	    xgen_find_type (state, xgen_xml_get_prop (elem, "oldname"));
+	  /* TODO: When we support imports, we should also support
+	   * lazy resolving of typedefs */
+	  extension->typedefs =
+	    g_list_prepend (extension->typedefs, typedef_def);
 	}
       else if (strcmp (xgen_xml_get_node_name (elem), "import") == 0)
 	{
 	}
+
+      if (def)
+	{
+	  /* FIXME: NB this stuff is duplicated above for reply definitions
+	   * which is a bit yukky. */
+	  g_assert (def->name);
+	  extension->all_definitions =
+	    g_list_prepend (extension->all_definitions, def);
+	}
     }
 
-  extension->definitions = g_list_reverse (extension->definitions);
+  extension->all_definitions = g_list_reverse (extension->all_definitions);
 }
 
 static long
@@ -1196,8 +1362,6 @@ xgen_parse_xcb_proto_files (GList *files)
 
   for (tmp = files; tmp != NULL; tmp = tmp->next)
     xgen_parse_xmlxcb_file (state, tmp->data);
-
-  state->definitions = g_list_reverse (state->definitions);
 
   /* Make sure that xproto is listed first */
   state->extensions = g_list_reverse (state->extensions);
@@ -1366,18 +1530,24 @@ setup_request_namespace (GXGenOutputContext *output_context)
     }
   else
     {
+      char *ext_cc = gxgen_get_camelcase_name (ext->header);
+      char *ext_uc = gxgen_get_uppercase_name (ext->header);
+      char *ext_lc = gxgen_get_lowercase_name (ext->header);
       namespace->gx_cc =
 	g_strdup_printf ("%s%s",
 			 obj->name_cc,
-			 gxgen_get_camelcase_name (ext->header));
+			 ext_cc);
       namespace->gx_uc =
 	g_strdup_printf ("%s_%s_",
 			 obj->name_uc,
-			 gxgen_get_uppercase_name (ext->header));
+			 ext_uc);
       namespace->gx_lc =
 	g_strdup_printf ("%s_%s_",
 			 obj->name_lc,
-			 gxgen_get_lowercase_name (ext->header));
+			 ext_lc);
+      g_free (ext_cc);
+      g_free (ext_uc);
+      g_free (ext_lc);
     }
 
   if (strcmp (ext->header, "xproto") == 0)
@@ -1388,26 +1558,36 @@ setup_request_namespace (GXGenOutputContext *output_context)
     }
   else
     {
+      char *ext_lc = gxgen_get_lowercase_name (ext->header);
       namespace->xcb_lc =
-	g_strdup_printf ("%s_",
-			 gxgen_get_lowercase_name (ext->header));
+	g_strdup_printf ("%s_", ext_lc);
       namespace->xcb_cc = g_strdup ("FIXME");
       namespace->xcb_uc = g_strdup ("FIXME");
+
+      g_free (ext_lc);
     }
 
   return namespace;
 }
 
 GXGenOutputNamespace *
-setup_field_type_namespace (GXGenOutputContext *output_context,
-			    XGenFieldDefinition *field)
+setup_data_type_namespace (GXGenOutputContext *output_context)
 {
   const XGenExtension *ext = output_context->extension;
   GXGenOutputNamespace *namespace = g_new0 (GXGenOutputNamespace, 1);
 
-  namespace->gx_cc = g_strdup ("FIXME");
-  namespace->gx_uc = g_strdup ("FIXME");
-  namespace->gx_lc = g_strdup ("FIXME");
+  if (strcmp (ext->header, "xproto") == 0)
+    {
+      namespace->gx_lc = g_strdup ("");
+      namespace->gx_uc = g_strdup ("");
+      namespace->gx_cc = g_strdup ("");
+    }
+  else
+    {
+      namespace->gx_cc = gxgen_get_camelcase_name (ext->header);
+      namespace->gx_uc = gxgen_get_uppercase_name (ext->header);
+      namespace->gx_lc = gxgen_get_lowercase_name (ext->header);
+    }
 
   if (strcmp (ext->header, "xproto") == 0)
     {
@@ -1417,11 +1597,14 @@ setup_field_type_namespace (GXGenOutputContext *output_context,
     }
   else
     {
+      char *ext_lc = gxgen_get_lowercase_name (ext->header);
+
       namespace->xcb_lc =
-	g_strdup_printf ("%s_",
-			 gxgen_get_lowercase_name (ext->header));
+	g_strdup_printf ("%s_", ext_lc);
       namespace->xcb_cc = g_strdup ("FIXME");
       namespace->xcb_uc = g_strdup ("FIXME");
+
+      g_free (ext_lc);
     }
 
   return namespace;
@@ -1466,7 +1649,7 @@ output_field_xcb_reference (GXGenOutputContext *output_context,
 	       || field->definition->type == XGEN_UNION))
     {
       GXGenOutputNamespace *namespace =
-	setup_field_type_namespace (output_context, field);
+	setup_data_type_namespace (output_context);
       char * type_lc = gxgen_get_lowercase_name (field->definition->name);
       /* NB: XCB passes structures by value,
        * while GX passes them by reference */
@@ -1504,7 +1687,7 @@ output_typedefs (GXGenOutputContext *output_context)
   char *typedef_type_cc;
   char *typedef_name_cc;
 
-  for (tmp = extension->definitions; tmp != NULL; tmp = tmp->next)
+  for (tmp = extension->all_definitions; tmp != NULL; tmp = tmp->next)
     {
       XGenDefinition *def = tmp->data;
 
@@ -1540,21 +1723,20 @@ output_typedefs (GXGenOutputContext *output_context)
     }
   OUT (GXGEN_PART_CONNECTION_OBJ_H_TYPEDEFS, "\n");
 
-  for (tmp = extension->definitions; tmp != NULL; tmp = tmp->next)
+  for (tmp = extension->typedefs; tmp != NULL; tmp = tmp->next)
     {
       XGenDefinition *def = tmp->data;
 
-      if (def->type == XGEN_TYPEDEF)
-	{
-	  typedef_type_cc = gxgen_get_camelcase_name (def->reference->name);
-	  typedef_name_cc = gxgen_definition_to_gx_type (def, FALSE);
+      XGenTypedef *typedef_def = XGEN_TYPEDEF_DEF (def);
+      typedef_type_cc =
+	gxgen_get_camelcase_name (typedef_def->reference->name);
+      typedef_name_cc = gxgen_definition_to_gx_type (def, FALSE);
 
-	  OUT (GXGEN_PART_CONNECTION_OBJ_H_TYPEDEFS,
-	       "typedef %s %s;\n", typedef_type_cc, typedef_name_cc);
+      OUT (GXGEN_PART_CONNECTION_OBJ_H_TYPEDEFS,
+	   "typedef %s %s;\n", typedef_type_cc, typedef_name_cc);
 
-	  g_free (typedef_type_cc);
-	  g_free (typedef_name_cc);
-	}
+      g_free (typedef_type_cc);
+      g_free (typedef_name_cc);
     }
   OUT (GXGEN_PART_CONNECTION_OBJ_H_TYPEDEFS, "\n\n\n");
 
@@ -1567,54 +1749,55 @@ output_structs_and_unions (GXGenOutputContext *output_context)
   const XGenExtension *extension = output_context->extension;
   GList *tmp;
 
-  for (tmp = extension->definitions; tmp != NULL; tmp = tmp->next)
+  for (tmp = extension->all_definitions; tmp != NULL; tmp = tmp->next)
     {
       XGenDefinition *def = tmp->data;
       guint pad = 0;
+      GList *tmp2;
 
-      if (def->type == XGEN_STRUCT || def->type == XGEN_UNION)
+      if (def->type != XGEN_STRUCT && def->type != XGEN_UNION)
+	continue;
+
+      /* Some types are special cased if they are represented as
+       * objects */
+      if (strcmp (def->name, "SCREEN") == 0)
+	continue;
+
+      OUT (GXGEN_PART_CONNECTION_OBJ_H_TYPEDEFS,
+	   "typedef %s {\n",
+	   def->type == XGEN_STRUCT ? "struct" : "union");
+
+      for (tmp2 = XGEN_STRUCT_DEF (def)->fields;
+	   tmp2 != NULL;
+	   tmp2 = tmp2->next)
 	{
-	  GList *tmp2;
-
-	  /* Some types are special cased if they are represented as
-	   * objects */
-	  if (strcmp (def->name, "SCREEN") == 0)
-	    continue;
-
-	  OUT (GXGEN_PART_CONNECTION_OBJ_H_TYPEDEFS,
-	       "typedef %s {\n",
-	       def->type == XGEN_STRUCT ? "struct" : "union");
-
-	  for (tmp2 = def->fields; tmp2 != NULL; tmp2 = tmp2->next)
+	  XGenFieldDefinition *field = tmp2->data;
+	  if (strcmp (field->name, "pad") == 0)
 	    {
-	      XGenFieldDefinition *field = tmp2->data;
-	      if (strcmp (field->name, "pad") == 0)
+	      output_pad_field (output_context,
+				GXGEN_PART_CONNECTION_OBJ_H_TYPEDEFS,
+				field,
+				pad++);
+	    }
+	  else
+	    {
+	      /* Dont print trailing list fields */
+	      if (!(tmp2->next == NULL && field->length != NULL))
 		{
-		  output_pad_field (output_context,
-				    GXGEN_PART_CONNECTION_OBJ_H_TYPEDEFS,
-				    field,
-				    pad++);
-		}
-	      else
-		{
-		  /* Dont print trailing list fields */
-		  if (!(tmp2->next == NULL && field->length != NULL))
-		    {
-		      OUT (GXGEN_PART_CONNECTION_OBJ_H_TYPEDEFS,
-			   "\t%s %s;\n",
-			   gxgen_definition_to_gx_type (field->definition, FALSE),
-			   field->name);
-		    }
+		  OUT (GXGEN_PART_CONNECTION_OBJ_H_TYPEDEFS,
+		       "\t%s %s;\n",
+		       gxgen_definition_to_gx_type (field->definition,
+						    FALSE),
+		       field->name);
 		}
 	    }
-
-	  OUT (GXGEN_PART_CONNECTION_OBJ_H_TYPEDEFS, "");
-	  OUT (GXGEN_PART_CONNECTION_OBJ_H_TYPEDEFS,
-	       "} %s;\n\n", gxgen_definition_to_gx_type (def, FALSE));
 	}
+
+      OUT (GXGEN_PART_CONNECTION_OBJ_H_TYPEDEFS, "");
+      OUT (GXGEN_PART_CONNECTION_OBJ_H_TYPEDEFS,
+	   "} %s;\n\n", gxgen_definition_to_gx_type (def, FALSE));
     }
   OUT (GXGEN_PART_CONNECTION_OBJ_H_TYPEDEFS, "\n");
-
 }
 
 static void
@@ -1623,18 +1806,15 @@ output_enums (GXGenOutputContext *output_context)
   const XGenExtension *extension = output_context->extension;
   GList *tmp;
 
-  for (tmp = extension->definitions; tmp != NULL; tmp = tmp->next)
+  for (tmp = extension->enums; tmp != NULL; tmp = tmp->next)
     {
       XGenDefinition *def = tmp->data;
       GList *tmp2;
 
-      if (def->type != XGEN_ENUM)
-	continue;
-
       OUT (GXGEN_PART_CONNECTION_OBJ_H_TYPEDEFS,
 	   "typedef enum\n{\n");
 
-      for (tmp2 = def->items; tmp2 != NULL; tmp2 = tmp2->next)
+      for (tmp2 = XGEN_ENUM_DEF (def)->items; tmp2 != NULL; tmp2 = tmp2->next)
 	{
 	  XGenItemDefinition *item = tmp2->data;
 	  char *enum_stem_uc = gxgen_get_uppercase_name (item->name);
@@ -1680,10 +1860,9 @@ setup_output_object (XGenRequest *request)
    * The default object for requests to become member of is
    * GXConnection.
    */
-  if (g_list_length (request->definition->fields) >= 2)
+  if (g_list_length (request->fields) >= 2)
     {
-      for (tmp = request->definition->fields;
-	   tmp != NULL; tmp = tmp->next)
+      for (tmp = request->fields; tmp != NULL; tmp = tmp->next)
 	{
 	  XGenFieldDefinition *field = tmp->data;
 
@@ -1775,12 +1954,12 @@ output_reply_typedef (GXGenOutputContext *output_context)
   GList *tmp;
   guint pad = 0;
 
-  if (g_list_length (request->definition->reply_fields) <= 1)
+  if (!request->reply)
     return;
 
   OUT (obj->h_typedefs, "typedef struct {\n");
 
-  for (tmp = request->definition->reply_fields;
+  for (tmp = request->reply->fields;
        tmp != NULL; tmp = tmp->next)
     {
       XGenFieldDefinition *field = tmp->data;
@@ -1822,10 +2001,10 @@ output_reply_list_get (GXGenOutputContext *output_context)
   const GXGenOutputObject *obj = output_context->obj;
   XGenFieldDefinition *field;
 
-  if (!request->definition->reply_fields)
+  if (!request->reply)
     return;
 
-  field = (g_list_last (request->definition->reply_fields))->data;
+  field = (g_list_last (request->reply->fields))->data;
   if (field->length == NULL)
     return;
 
@@ -1931,10 +2110,10 @@ output_reply_list_free (GXGenOutputContext *output_context)
   const GXGenOutputObject *obj = output_context->obj;
   XGenFieldDefinition *field;
 
-  if (!request->definition->reply_fields)
+  if (!request->reply)
     return;
 
-  field = (g_list_last (request->definition->reply_fields))->data;
+  field = (g_list_last (request->reply->fields))->data;
   if (field->length == NULL)
     return;
 
@@ -1980,7 +2159,7 @@ output_reply_free (GXGenOutputContext *output_context)
   const XGenRequest *request = out_request->request;
   const GXGenOutputObject *obj = output_context->obj;
 
-  if (!request->definition->reply_fields)
+  if (!request->reply)
     return;
 
   OUT2 (obj->h_protos,
@@ -2050,7 +2229,7 @@ output_reply_variable_declarations (GXGenOutputContext *output_context)
   OUT (obj->c_funcs,
        "\txcb_generic_error_t *xcb_error;\n");
 
-  if (g_list_length (request->definition->reply_fields) > 1)
+  if (request->reply)
     {
       OUT (obj->c_funcs,
 	   "\tGX%s%sReply *reply = g_slice_new (GX%s%sReply);\n",
@@ -2083,7 +2262,7 @@ output_async_request (GXGenOutputContext *output_context)
         out_request->gx_name_lc,
         obj->first_arg);
 
-  for (tmp = request->definition->fields; tmp != NULL; tmp = tmp->next)
+  for (tmp = request->fields; tmp != NULL; tmp = tmp->next)
     {
       XGenFieldDefinition *field = tmp->data;
       const char *type;
@@ -2136,7 +2315,7 @@ output_async_request (GXGenOutputContext *output_context)
 	   obj->name_lc, obj->name_lc);
     }
 
-  if (g_list_length (request->definition->reply_fields) <= 1)
+  if (!request->reply)
     OUT (obj->c_funcs,
 	 "\txcb_void_cookie_t xcb_cookie;\n");
   else
@@ -2152,7 +2331,7 @@ output_async_request (GXGenOutputContext *output_context)
 
   OUT (obj->c_funcs, "\n");
 
-  if (g_list_length (request->definition->reply_fields) > 1)
+  if (request->reply)
     {
       OUT (obj->c_funcs,
 	   "\txcb_cookie =\n"
@@ -2171,7 +2350,7 @@ output_async_request (GXGenOutputContext *output_context)
 	   out_request->xcb_name_lc);
     }
 
-  for (tmp = request->definition->fields; tmp != NULL;
+  for (tmp = request->fields; tmp != NULL;
        tmp = tmp->next)
     {
       XGenFieldDefinition *field = tmp->data;
@@ -2229,7 +2408,7 @@ output_reply (GXGenOutputContext *output_context)
   const XGenRequest *request = out_request->request;
   const GXGenOutputObject *obj = output_context->obj;
 
-  if (g_list_length (request->definition->reply_fields) > 1)
+  if (request->reply)
     {
       OUT2 (obj->h_protos, obj->c_funcs,
 	    "\nGX%s%sReply *\n",
@@ -2250,7 +2429,7 @@ output_reply (GXGenOutputContext *output_context)
   OUT (obj->c_funcs,
        "\tGXConnection *connection = gx_cookie_get_connection (cookie);\n");
 
-  if (g_list_length (request->definition->reply_fields) <= 1)
+  if (!request->reply)
     OUT (obj->c_funcs, "\txcb_void_cookie_t xcb_cookie;\n");
   else
     {
@@ -2262,16 +2441,15 @@ output_reply (GXGenOutputContext *output_context)
 
   OUT (obj->c_funcs,
        "\tg_return_val_if_fail (error == NULL || *error == NULL, %s);\n",
-       g_list_length (request->definition->reply_fields)
-	  <= 1 ? "FALSE" : "NULL");
+       request->reply == NULL ? "FALSE" : "NULL");
 
   OUT (obj->c_funcs, "\n");
 
-  if (g_list_length (request->definition->reply_fields) > 1)
+  if (request->reply)
     OUT (obj->c_funcs,
 	 "\treply->connection = connection;\n\n");
 
-  if (g_list_length (request->definition->reply_fields) > 1)
+  if (request->reply)
     {
       OUT (obj->c_funcs,
 	   "\treply->x11_reply = (GX%s%sX11Reply *)\n"
@@ -2301,8 +2479,7 @@ output_reply (GXGenOutputContext *output_context)
        "\t\t\t\"Protocol Error\");\n"
        "\t\treturn %s;\n"
        "\t  }\n",
-       g_list_length (request->definition->reply_fields)
-       > 1 ? "NULL" : "FALSE");
+       request->reply != NULL ? "NULL" : "FALSE");
   /* FIXME - free reply */
   /* FIXME - check we don't skip any other function cleanup */
 
@@ -2312,7 +2489,7 @@ output_reply (GXGenOutputContext *output_context)
   /* If the cookie has no associated reply or error, then we ask
    * XCB for a reply/error
    */
-  if (g_list_length (request->definition->reply_fields) > 1)
+  if (request->reply)
     {
       OUT (obj->c_funcs,
 	   "\treply->x11_reply = (GX%s%sX11Reply *)\n"
@@ -2343,18 +2520,17 @@ output_reply (GXGenOutputContext *output_context)
        "\t\t\t\"Protocol Error\");\n"
        "\t\treturn %s;\n"
        "\t  }\n",
-       g_list_length (request->definition->reply_fields)
-       > 1 ? "NULL" : "FALSE");
+       request->reply != NULL ? "NULL" : "FALSE");
 
 
-  if (g_list_length (request->definition->reply_fields) > 1)
+  if (request->reply)
     OUT (obj->c_funcs,
 	 "\n\t  }\n");
 
   OUT (obj->c_funcs,
        "\tgx_connection_unregister_cookie (connection, cookie);\n");
 
-  if (g_list_length (request->definition->reply_fields) <= 1)
+  if (!request->reply)
     OUT (obj->c_funcs, "\treturn TRUE;\n");
   else
     OUT (obj->c_funcs, "\treturn reply;\n");
@@ -2372,7 +2548,7 @@ output_sync_request (GXGenOutputContext *output_context)
   gboolean has_mask_value_items = FALSE;
   GList *tmp;
 
-  if (g_list_length (request->definition->reply_fields) <= 1)
+  if (!request->reply)
     OUT2 (obj->h_protos, obj->c_funcs, "\ngboolean\n");
   else
     {
@@ -2386,7 +2562,7 @@ output_sync_request (GXGenOutputContext *output_context)
         "gx_%s%s (%s",
         output_context->namespace->gx_lc, out_request->gx_name_lc, obj->first_arg);
 
-  for (tmp = request->definition->fields;
+  for (tmp = request->fields;
        tmp != NULL; tmp = tmp->next)
     {
       XGenFieldDefinition *field = tmp->data;
@@ -2435,7 +2611,7 @@ output_sync_request (GXGenOutputContext *output_context)
 	   obj->name_lc, obj->name_lc);
     }
 
-  if (g_list_length (request->definition->reply_fields) <= 1)
+  if (!request->reply)
     OUT (obj->c_funcs, "\txcb_void_cookie_t cookie;\n");
   else
     OUT (obj->c_funcs, "\txcb_%s%s_cookie_t cookie;\n",
@@ -2449,18 +2625,18 @@ output_sync_request (GXGenOutputContext *output_context)
     output_mask_value_variable_declarations (output_context, obj->c_funcs);
 
   OUT (obj->c_funcs, "\n");
-  if (g_list_length (request->definition->reply_fields) <= 1)
+  if (!request->reply)
     OUT (obj->c_funcs,
 	 "\tg_return_val_if_fail (error == NULL || *error == NULL, FALSE);\n");
   else
     OUT (obj->c_funcs,
 	 "\tg_return_val_if_fail (error == NULL || *error == NULL, NULL);\n");
 
-  if (g_list_length (request->definition->reply_fields) > 1)
+  if (request->reply)
     OUT (obj->c_funcs,
 	 "\treply->connection = connection;\n\n");
 
-  if (g_list_length (request->definition->reply_fields) > 1)
+  if (request->reply)
     {
       OUT (obj->c_funcs,
 	   "\tcookie =\n"
@@ -2479,7 +2655,7 @@ output_sync_request (GXGenOutputContext *output_context)
   OUT (obj->c_funcs,
        "\t\t\tgx_connection_get_xcb_connection (connection)");
 
-  for (tmp = request->definition->fields; tmp != NULL;
+  for (tmp = request->fields; tmp != NULL;
        tmp = tmp->next)
     {
       XGenFieldDefinition *field = tmp->data;
@@ -2504,7 +2680,7 @@ output_sync_request (GXGenOutputContext *output_context)
     }
   OUT (obj->c_funcs, ");\n\n");
 
-  if (g_list_length (request->definition->reply_fields) > 1)
+  if (request->reply)
     {
       OUT (obj->c_funcs,
 	   "\treply->x11_reply = (GX%s%sX11Reply *)\n"
@@ -2536,13 +2712,12 @@ output_sync_request (GXGenOutputContext *output_context)
        "\t\t\t\"Protocol Error\");\n"
        "\t\treturn %s;\n"
        "\t  }\n",
-       g_list_length (request->definition->reply_fields)
-       > 1 ? "NULL" : "FALSE");
+       request->reply != NULL ? "NULL" : "FALSE");
 
   if (!obj->type == GXGEN_IS_CONNECTION_OBJ)
     OUT (obj->c_funcs, "\tg_object_unref (connection);\n");
 
-  if (g_list_length (request->definition->reply_fields) <= 1)
+  if (!request->reply)
     OUT (obj->c_funcs, "\n\treturn TRUE;\n");
   else
     OUT (obj->c_funcs, "\n\treturn reply;\n");
@@ -2559,19 +2734,20 @@ output_requests (GXGenOutputContext *output_context)
   for (tmp = extension->requests; tmp != NULL; tmp = tmp->next)
     {
       XGenRequest *request = tmp->data;
+      XGenDefinition *request_def = XGEN_DEF (request);
       GXGenOutputRequest *out_request;
       GXGenOutputObject *obj = NULL;
       GXGenOutputNamespace *namespace;
       gchar *gx_name;
 
-      if (strcmp (request->definition->name, "RotateProperties") == 0)
+      if (strcmp (request_def->name, "RotateProperties") == 0)
 	g_print ("DEBUG\n");
 
       /* Some constructor type requests are special cased as object
        * constructors */
-      if (strcmp (request->definition->name, "CreateWindow") == 0
-	  || strcmp (request->definition->name, "CreatePixmap") == 0
-	  || strcmp (request->definition->name, "CreateGC") == 0)
+      if (strcmp (request_def->name, "CreateWindow") == 0
+	  || strcmp (request_def->name, "CreatePixmap") == 0
+	  || strcmp (request_def->name, "CreateGC") == 0)
 	continue;
 
       out_request = g_new0 (GXGenOutputRequest, 1);
@@ -2585,12 +2761,12 @@ output_requests (GXGenOutputContext *output_context)
 
       /* the get/set_property names clash with the gobject
        * property accessor functions */
-      if (strcmp (request->definition->name, "GetProperty") == 0)
+      if (strcmp (request_def->name, "GetProperty") == 0)
 	gx_name = g_strdup ("GetXProperty");
-      else if (strcmp (request->definition->name, "SetProperty") == 0)
+      else if (strcmp (request_def->name, "SetProperty") == 0)
 	gx_name = g_strdup ("SetXProperty");
       else
-	gx_name = g_strdup (request->definition->name);
+	gx_name = g_strdup (request_def->name);
 
       out_request->gx_name_cc = gx_name;
       out_request->gx_name_lc =
@@ -2598,7 +2774,7 @@ output_requests (GXGenOutputContext *output_context)
       out_request->gx_name_uc =
 	gxgen_get_uppercase_name (out_request->gx_name_cc);
 
-      out_request->xcb_name_cc = g_strdup (request->definition->name);
+      out_request->xcb_name_cc = g_strdup (request_def->name);
       out_request->xcb_name_lc =
 	gxgen_get_lowercase_name (out_request->xcb_name_cc);
       out_request->xcb_name_uc =
@@ -2647,11 +2823,15 @@ output_event_typedefs (GXGenOutputContext *output_context)
   for (tmp = extension->events; tmp != NULL; tmp = tmp->next)
     {
       XGenEvent *event = tmp->data;
+      XGenDefinition *event_def = XGEN_DEF (event);
       GList *tmp2;
+      GXGenOutputNamespace *namespace;
+
+      namespace = setup_data_type_namespace (output_context);
 
       OUT (typedefs, "\ntypedef struct {\n");
 
-      for (tmp2 = event->definition->fields; tmp2 != NULL; tmp2 = tmp2->next)
+      for (tmp2 = event->fields; tmp2 != NULL; tmp2 = tmp2->next)
 	{
 	  XGenFieldDefinition *field = tmp2->data;
 	  if (strcmp (field->name, "pad") == 0)
@@ -2668,7 +2848,10 @@ output_event_typedefs (GXGenOutputContext *output_context)
 		}
 	    }
 	}
-      OUT (typedefs, "} GX%sEvent;\n", event->definition->name);
+      OUT (typedefs, "} GX%s%sEvent;\n",
+	   namespace->gx_cc, event_def->name);
+
+      free_namespace (namespace);
     }
 }
 
@@ -2682,8 +2865,8 @@ output_errors (GXGenOutputContext *output_context)
 
   for (tmp = extension->errors; tmp != NULL; tmp = tmp->next)
     {
-      XGenError *error = tmp->data;
-      XGenDefinition *definition = error->definition;
+      XGenDefinition *definition = tmp->data;
+      XGenError *error = XGEN_ERROR_DEF (definition);
 
       OUT (error_codes, "GX_PROTOCOL_ERROR_%s,\n",
 	   gxgen_get_uppercase_name (definition->name));
