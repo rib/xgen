@@ -57,6 +57,8 @@ typedef struct
   char	*name;
   char  *header;
 
+  GList *imports;
+
   GList *base_types;
   GList *structs;
   GList *unions;
@@ -69,17 +71,24 @@ typedef struct
   GList *events;
 
   GList *all_definitions;
+
+  /* Private */
+
+  xmlDoc *_xml_doc;
+  GList *_import_headers;
+  gboolean _parsed;
+
 } XGenExtension;
 
-typedef struct _XGenDefinition XGenDefinition;
-struct _XGenDefinition
+typedef struct _XGenDefinition
 {
   const XGenExtension *extension;
   XGenType	       type;
   char		      *name;
 
   void		      *_private; /* application private data */
-};
+} XGenDefinition;
+
 /**
  * Casts a specific definition into a generic definition
  */
@@ -583,26 +592,6 @@ typedef struct _GXGenOutputContext
 } GXGenOutputContext;
 
 
-#if 0
-/**
- * A wrapper for allocating an XGenDefinition, so we have single
- * place to do common initialisation
- */
-#define NEW_DEFINITION(TYPE) ((TYPE *)alloc_xgen_definition (sizeof (TYPE)))
-static XGenDefinition *
-alloc_xgen_definition (size_t size)
-{
-  XGenDefinition *def;
-
-  g_assert (size > sizeof (XGenDefinition));
-
-  def = g_malloc0 (size);
-
-  def->extension = extension;
-  return def
-}
-#endif
-
 /* Helper function to avoid casting. */
 static char *
 xgen_xml_get_prop (xmlNodePtr node, const char *name)
@@ -676,9 +665,7 @@ xgen_find_type (XGenState * state, char *name)
 
   /* First we try in looking in the extension being parsed
    * or the extension that was explicitly specified. */
-  for (tmp = state->extensions;
-       tmp != NULL;
-       tmp = tmp->next)
+  for (tmp = state->extensions; tmp != NULL; tmp = tmp->next)
     {
       XGenExtension *extension = tmp->data;
       if (strcmp (extension->header, extension_name) == 0)
@@ -689,12 +676,6 @@ xgen_find_type (XGenState * state, char *name)
 	    return def;
 	}
     }
-#if 0
-  for (i = 0; core_type_mappings[i].from != NULL; i++)
-    {
-
-    }
-#endif
 
   /* If an extension was explicitly specified we have no where
    * else to look */
@@ -704,9 +685,7 @@ xgen_find_type (XGenState * state, char *name)
       return NULL;
     }
 
-  for (tmp = state->extensions;
-       tmp != NULL;
-       tmp = tmp->next)
+  for (tmp = state->extensions; tmp != NULL; tmp = tmp->next)
     {
       XGenExtension *extension = tmp->data;
       XGenDefinition *def =
@@ -746,6 +725,7 @@ xgen_parse_expression (XGenState * state, xmlNode * elem)
       e->left = xgen_parse_expression (state, elem);
       elem = xgen_xml_next_elem (elem->next);
       e->right = xgen_parse_expression (state, elem);
+      xmlFree (temp);
     }
   else if (strcmp (xgen_xml_get_node_name (elem), "value") == 0)
     {
@@ -776,27 +756,32 @@ xgen_parse_field_elements (XGenState * state,
       field = g_new0 (XGenFieldDefinition, 1);
       if (strcmp (xgen_xml_get_node_name (cur), "pad") == 0)
 	{
+	  char *bytes = xgen_xml_get_prop (cur, "bytes");
 	  field->name = "pad";
 	  field->definition = xgen_find_type (state, "CARD8");
 	  field->length = g_new0 (XGenExpression, 1);
 	  field->length->type = XGEN_VALUE;
-	  field->length->value = atoi (xgen_xml_get_prop (cur, "bytes"));
+	  field->length->value = atoi (bytes);
+	  xmlFree (bytes);
 	}
       else if (strcmp (xgen_xml_get_node_name (cur), "field") == 0)
 	{
-	  field->name = strdup (xgen_xml_get_prop (cur, "name"));
+	  char *name = xgen_xml_get_prop (cur, "name");
+	  field->name = strdup (name);
 	  field->definition =
 	    xgen_find_type (state,
 			    xgen_xml_get_prop (cur, "type"));
+	  xmlFree (name);
 	}
       else if (strcmp (xgen_xml_get_node_name (cur), "list") == 0)
 	{
-	  /* FIXME - we shouldn't loose fact that these fields belong
-	   * to a list*/
-	  field->name = strdup (xgen_xml_get_prop (cur, "name"));
-	  field->definition =
-	    xgen_find_type (state,
-			    xgen_xml_get_prop (cur, "type"));
+	  char *name = xgen_xml_get_prop (cur, "name");
+	  char *type = xgen_xml_get_prop (cur, "type");
+	  field->name = strdup (name);
+	  xmlFree (name);
+	  field->definition = xgen_find_type (state, type);
+	  xmlFree (type);
+
 	  if (cur->children)
 	    {
 	      field->length = xgen_parse_expression (state, cur->children);
@@ -829,19 +814,26 @@ xgen_parse_field_elements (XGenState * state,
 	{
 	  XGenValueParam *valueparam = g_new0 (XGenValueParam, 1);
 	  XGenDefinition *def;
+	  char *value_mask_type;
+	  char *value_mask_name;
+	  char *value_list_name;
 
 	  def = XGEN_DEF (valueparam);
 	  def->extension = definition->extension;
 	  def->name = g_strdup ("valueparam");
 	  def->type = XGEN_VALUEPARAM;
 
-	  valueparam->reference =
-	    xgen_find_type (state,
-			      xgen_xml_get_prop (cur, "value-mask-type"));
-	  valueparam->mask_name =
-	    strdup (xgen_xml_get_prop (cur, "value-mask-name"));
-	  valueparam->list_name =
-	    strdup (xgen_xml_get_prop (cur, "value-list-name"));
+	  value_mask_type = xgen_xml_get_prop (cur, "value-mask-type");
+	  valueparam->reference = xgen_find_type (state, value_mask_type);
+	  xmlFree (value_mask_type);
+
+	  value_mask_name = xgen_xml_get_prop (cur, "value-mask-name");
+	  valueparam->mask_name = strdup (value_mask_name);
+	  xmlFree (value_mask_name);
+
+	  value_list_name = xgen_xml_get_prop (cur, "value-list-name");
+	  valueparam->list_name = strdup (value_list_name);
+	  xmlFree (value_list_name);
 
 	  field->name = g_strdup ("valueparam");
 	  field->definition = def;
@@ -931,8 +923,13 @@ xgen_parse_reply_fields (XGenState * state,
   return xgen_parse_field_elements (state, definition, reply);
 }
 
+/**
+ * Simply causes the corresponding xml to be opened, parsed by libxml2
+ * and then parsed enough to determine the imports so that we can do
+ * full parsing of the xcb definitions in dependency order.
+ */
 static void
-xgen_parse_xmlxcb_file (XGenState * state, char *filename)
+xgen_open_xcb_proto_file (XGenState * state, char *filename)
 {
   xmlDoc *doc;
   xmlNode *root, *elem;
@@ -949,7 +946,10 @@ xgen_parse_xmlxcb_file (XGenState * state, char *filename)
 
   root = xmlDocGetRootElement (doc);
   if (!root)
-    return;
+    {
+      xmlFreeDoc (doc);
+      return;
+    }
 
   extension_name = xgen_xml_get_prop (root, "extension-name");
   if (!extension_name)
@@ -957,9 +957,10 @@ xgen_parse_xmlxcb_file (XGenState * state, char *filename)
   extension_header = xgen_xml_get_prop (root, "header");
   g_assert (extension_header);
 
-  printf ("Extension: %s\n", extension_name);
+  g_print ("Extension: %s\n", extension_name);
 
   extension = g_new0 (XGenExtension, 1);
+  extension->_xml_doc = doc; /* FIXME: xmlFreeDoc */
   extension->name = g_strdup (extension_name);
   extension->header = g_strdup (extension_header);
   state->extensions = g_list_prepend (state->extensions, extension);
@@ -989,6 +990,39 @@ xgen_parse_xmlxcb_file (XGenState * state, char *filename)
 	    g_list_prepend (extension->base_types, base_type);
 	}
     }
+
+  for (elem = root->children;
+       elem != NULL; elem = xgen_xml_next_elem (elem->next))
+    {
+      if (strcmp (xgen_xml_get_node_name (elem), "import") == 0)
+	{
+	  char *import_header = xgen_xml_get_node_content (elem);
+
+	  extension->_import_headers =
+	    g_list_prepend (extension->_import_headers,
+			    g_strdup (import_header));
+
+	  xmlFree (import_header);
+	}
+    }
+}
+
+/**
+ * This function deals with parsing all the definitions within the xml protocol
+ * specs, but assumes that the imports have been used to ensure that all
+ * dependencies are parsed first.
+ */
+static void
+xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
+{
+  xmlNode *root, *elem;
+
+  if (extension->_parsed)
+    return;
+
+  root = xmlDocGetRootElement (extension->_xml_doc);
+  /* This should have already been checked in xgen_open_xcb_proto_file: */
+  g_assert (root);
 
   for (elem = root->children;
        elem != NULL; elem = xgen_xml_next_elem (elem->next))
@@ -1281,13 +1315,15 @@ xgen_parse_xmlxcb_file (XGenState * state, char *filename)
 
 	  typedef_def->reference =
 	    xgen_find_type (state, xgen_xml_get_prop (elem, "oldname"));
-	  /* TODO: When we support imports, we should also support
-	   * lazy resolving of typedefs */
+
 	  extension->typedefs =
 	    g_list_prepend (extension->typedefs, typedef_def);
 	}
       else if (strcmp (xgen_xml_get_node_name (elem), "import") == 0)
 	{
+	  extension->imports =
+	    g_list_prepend (extension->imports,
+			    xgen_xml_get_node_content (elem));
 	}
 
       if (def)
@@ -1301,6 +1337,36 @@ xgen_parse_xmlxcb_file (XGenState * state, char *filename)
     }
 
   extension->all_definitions = g_list_reverse (extension->all_definitions);
+
+  extension->_parsed = TRUE;
+}
+
+/**
+ * This function recursivly works to parse all imported dependencies of an xcb
+ * protocol extensions and then parse the current extension.
+ */
+static void
+xgen_parse_xcb_proto_and_imports (XGenState *state, XGenExtension *extension)
+{
+  GList *tmp;
+
+  if (extension->_parsed)
+    return;
+
+  if (!extension->imports)
+    {
+      xgen_parse_xcb_proto_file (state, extension);
+      return;
+    }
+
+  for (tmp = extension->imports; tmp != NULL; tmp = tmp->next)
+    {
+      XGenExtension *import = tmp->data;
+
+      xgen_parse_xcb_proto_and_imports (state, import);
+    }
+
+  xgen_parse_xcb_proto_file (state, extension);
 }
 
 static long
@@ -1369,30 +1435,86 @@ xgen_evaluate_expression (XGenExpression * expression,
   return 0;
 }
 
+static XGenExtension *
+find_extension (XGenState *state, gchar *extension_header)
+{
+  GList *tmp;
+
+  for (tmp = state->extensions; tmp != NULL; tmp=tmp->next)
+    {
+      XGenExtension *extension = tmp->data;
+
+      if (strcmp (extension->header, extension_header) == 0)
+	return extension;
+    }
+  return NULL;
+}
+
+/**
+ * When first parsing the xml files we create a GList of import_header
+ * names for each extension. This function uses the header names to
+ * create a list of XGenExtension pointers.
+ *
+ * This function returns FALSE if any of the imported extensions can't
+ * be resolved.
+ */
+static gboolean
+resolve_imports (XGenState *state)
+{
+  GList *tmp;
+
+  for (tmp = state->extensions; tmp != NULL; tmp=tmp->next)
+    {
+      XGenExtension *extension = tmp->data;
+      GList *tmp2;
+
+      for (tmp2 = extension->_import_headers; tmp2 != NULL; tmp2 = tmp2->next)
+	{
+	  gchar *import_header = tmp2->data;
+	  XGenExtension *import;
+
+	  import = find_extension (state, import_header);
+	  if (!import)
+	    return FALSE;
+
+	  extension->imports = g_list_prepend (extension->imports, import);
+	}
+    }
+  return TRUE;
+}
+
 /**
  * xgen_parse_xcb_proto_files:
  * @files: A list of xcb xml protocol descriptions
  *
  * This function takes a list of protocol description files and parses
  * them in to structures that can be accessed via the returned XGenState
- * pointer. Note: currently the files are parsed in the order listed and
- * its your responsability to list in order of inter-dependencies, with
- * xproto.xml first.
+ * pointer.
+ *
+ * This function returns NULL if there was a problem in parsing the files
  */
 static XGenState *
 xgen_parse_xcb_proto_files (GList *files)
 {
-  XGenState *state = g_new0 (XGenState, 1);
+  XGenState  *state = g_new0 (XGenState, 1);
   unsigned long l = 1;
   GList *tmp;
 
   state->host_is_little_endian = *(unsigned char *)&l ? TRUE : FALSE;
 
   for (tmp = files; tmp != NULL; tmp = tmp->next)
-    xgen_parse_xmlxcb_file (state, tmp->data);
+    xgen_open_xcb_proto_file (state, tmp->data);
 
-  /* Make sure that xproto is listed first */
-  state->extensions = g_list_reverse (state->extensions);
+  if (!resolve_imports (state))
+    return NULL;
+
+  for (tmp = state->extensions; tmp != NULL; tmp = tmp->next)
+    {
+      XGenExtension *extension = tmp->data;
+      xgen_parse_xcb_proto_and_imports (state, extension);
+    }
+
+  /* FIXME: Clean things up if there was an error resolving things! */
 
   return state;
 }
@@ -1972,7 +2094,6 @@ output_reply_typedef (GXGenOutputContext *output_context)
 {
   const GXGenOutputRequest *out_request = output_context->out_request;
   const XGenRequest *request = out_request->request;
-  const GXGenOutputObject *obj = output_context->obj;
   GList *tmp;
   guint pad = 0;
 
@@ -2109,7 +2230,6 @@ output_reply_list_free (GXGenOutputContext *output_context)
 {
   const GXGenOutputRequest *out_request = output_context->out_request;
   const XGenRequest *request = out_request->request;
-  const GXGenOutputObject *obj = output_context->obj;
   XGenFieldDefinition *field;
 
   if (!request->reply)
@@ -2135,14 +2255,13 @@ output_reply_list_free (GXGenOutputContext *output_context)
 
   if (is_special_xid_definition (field->definition))
     {
-      _C (
-       "\t%s*p = %s->data;\n"
-       "\tint i;\n"
-       "\tfor (i = 0; i < %s->len; i++)\n"
-       "\t\tg_object_unref (p[i]);\n",
-       gxgen_definition_to_gx_type (field->definition, TRUE),
-       field->name,
-       field->name);
+      _C ("\t%s*p = %s->data;\n"
+	  "\tint i;\n"
+	  "\tfor (i = 0; i < %s->len; i++)\n"
+	  "\t\tg_object_unref (p[i]);\n",
+	  gxgen_definition_to_gx_type (field->definition, TRUE),
+	  field->name,
+	  field->name);
     }
 
   _C ("\tg_array_free (%s, TRUE);\n", field->name);
@@ -2155,7 +2274,6 @@ output_reply_free (GXGenOutputContext *output_context)
 {
   const GXGenOutputRequest *out_request = output_context->out_request;
   const XGenRequest *request = out_request->request;
-  const GXGenOutputObject *obj = output_context->obj;
 
   if (!request->reply)
     return;
@@ -2210,19 +2328,16 @@ output_reply_variable_declarations (GXGenOutputContext *output_context)
 {
   const GXGenOutputRequest *out_request = output_context->out_request;
   const XGenRequest *request = out_request->request;
-  const GXGenOutputObject *obj = output_context->obj;
 
-  _C (
-       "\txcb_generic_error_t *xcb_error;\n");
+  _C ("\txcb_generic_error_t *xcb_error;\n");
 
   if (request->reply)
     {
-      _C (
-	   "\tGX%s%sReply *reply = g_slice_new (GX%s%sReply);\n",
-	   output_context->namespace->gx_cc,
-	   out_request->gx_name_cc,
-	   output_context->namespace->gx_cc,
-	   out_request->gx_name_cc);
+      _C ("\tGX%s%sReply *reply = g_slice_new (GX%s%sReply);\n",
+	  output_context->namespace->gx_cc,
+	  out_request->gx_name_cc,
+	  output_context->namespace->gx_cc,
+	  out_request->gx_name_cc);
     }
 }
 
@@ -2380,7 +2495,6 @@ output_reply (GXGenOutputContext *output_context)
 {
   const GXGenOutputRequest *out_request = output_context->out_request;
   const XGenRequest *request = out_request->request;
-  const GXGenOutputObject *obj = output_context->obj;
 
   if (request->reply)
     {
@@ -2395,11 +2509,9 @@ output_reply (GXGenOutputContext *output_context)
        output_context->namespace->gx_lc, out_request->gx_name_lc);
 
   _H (";\n");
-  _C (
-       "\n{\n");
+  _C ("\n{\n");
 
-  _C (
-       "\tGXConnection *connection = gx_cookie_get_connection (cookie);\n");
+  _C ("\tGXConnection *connection = gx_cookie_get_connection (cookie);\n");
 
   if (!request->reply)
     _C ("\txcb_void_cookie_t xcb_cookie;\n");
@@ -3156,8 +3268,6 @@ main (int argc, char **argv)
 
   for (i = 1; i < argc && argv[i]; i++)
     files = g_list_prepend (files, g_strdup (argv[i]));
-  /* FIXME NB: we must currently ensure that xproto.xml is listed first */
-  files = g_list_reverse (files);
 
   state = xgen_parse_xcb_proto_files (files);
 
