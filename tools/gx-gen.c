@@ -1992,8 +1992,7 @@ output_reply_typedef (GXGenOutputContext *output_context)
 	  /* Dont print trailing list members */
 	  if (!(tmp->next == NULL && field->length != NULL))
 	    {
-	      _TD (
-		   "\t%s %s;\n",
+	      _TD ("\t%s %s;\n",
 		   gxgen_definition_to_gx_type (field->definition, FALSE),
 		   field->name);
 	    }
@@ -2042,55 +2041,44 @@ output_reply_list_get (GXGenOutputContext *output_context)
        out_request->gx_name_lc);
 
   _H (";\n");
-  _C (
-       "\n{\n");
+  _C ("\n{\n");
 
-  _C (
-       "  %s *p = (%s *)(%s_reply->x11_reply + 1);\n",
-       gxgen_definition_to_gx_type (field->definition, FALSE),
-       gxgen_definition_to_gx_type (field->definition, FALSE),
-       out_request->gx_name_lc);
+  _C ("  %s *p = (%s *)(%s_reply->x11_reply + 1);\n",
+      gxgen_definition_to_gx_type (field->definition, FALSE),
+      gxgen_definition_to_gx_type (field->definition, FALSE),
+      out_request->gx_name_lc);
 
-  _C (
-       "  GArray *tmp;\n");
+  _C ("  GArray *tmp;\n");
 
-  _C (
-       "\n");
+  _C ("\n");
 
-  _C (
-       "/* It's possible the connection has been closed since the reply\n"
-       " * was recieved: (the reply struct contains weak pointer) */\n"
-       "  if (!%s_reply->connection)\n"
-       "    return NULL;\n",
-       out_request->gx_name_lc);
+  _C ("/* It's possible the connection has been closed since the reply\n"
+      " * was recieved: (the reply struct contains weak pointer) */\n"
+      "  if (!%s_reply->connection)\n"
+      "    return NULL;\n",
+      out_request->gx_name_lc);
 
   if (is_special_xid_definition (field->definition))
     {
-      _C (
-       "  tmp = g_array_new (TRUE, FALSE, sizeof(void *));\n");
-      _C (
-       "  int i;\n");
+      _C ("  tmp = g_array_new (TRUE, FALSE, sizeof(void *));\n");
+      _C ("  int i;\n");
     }
   else
-    _C (
-       "  tmp = g_array_new (TRUE, FALSE, sizeof(%s));\n",
-       gxgen_definition_to_gx_type (field->definition, FALSE));
+    _C ("  tmp = g_array_new (TRUE, FALSE, sizeof(%s));\n",
+        gxgen_definition_to_gx_type (field->definition, FALSE));
 
   if (is_special_xid_definition (field->definition))
     {
-      _C (
-       "  for (i = 0; i< %s_reply->x11_reply->%s; i++)\n"
-       "    {\n",
-       out_request->gx_name_lc,
-       field->length->field);
+      _C ("  for (i = 0; i< %s_reply->x11_reply->%s; i++)\n"
+	  "    {\n",
+	  out_request->gx_name_lc,
+	  field->length->field);
 
-      _C (
-       "      /* FIXME - mutex */\n");
+      _C ("      /* FIXME - mutex */\n");
 
-      _C (
-       "      %s item = _gx_%s_find_from_xid (p[i]);\n",
-       gxgen_definition_to_gx_type (field->definition, TRUE),
-       obj->name_lc);
+      _C ("      %s item = _gx_%s_find_from_xid (p[i]);\n",
+	  gxgen_definition_to_gx_type (field->definition, TRUE),
+	  obj->name_lc);
 
       _C (
        "      if (!item)\n"
@@ -2101,22 +2089,18 @@ output_reply_list_get (GXGenOutputContext *output_context)
        "			     NULL);\n",
        obj->name_lc, out_request->gx_name_lc);
 
-      _C (
-       "      tmp = g_array_append_val (tmp, item);\n"
-       "    }\n");
+      _C ("      tmp = g_array_append_val (tmp, item);\n"
+	  "    }\n");
     }
   else
     {
-      _C (
-       "  tmp = g_array_append_vals (tmp, p, %s_reply->x11_reply->%s);\n",
-       out_request->gx_name_lc, field->length->field);
+      _C ("  tmp = g_array_append_vals (tmp, p, %s_reply->x11_reply->%s);\n",
+	  out_request->gx_name_lc, field->length->field);
     }
 
-  _C (
-       "  return tmp;\n");
+  _C ("  return tmp;\n");
 
-  _C (
-       "}\n");
+  _C ("}\n");
 
 }
 
@@ -2147,8 +2131,7 @@ output_reply_list_free (GXGenOutputContext *output_context)
        field->name);
 
   _H (";\n");
-  _C (
-       "\n{\n");
+  _C ("\n{\n");
 
   if (is_special_xid_definition (field->definition))
     {
@@ -2164,8 +2147,7 @@ output_reply_list_free (GXGenOutputContext *output_context)
 
   _C ("\tg_array_free (%s, TRUE);\n", field->name);
 
-  _C (
-       "}\n");
+  _C ("}\n");
 }
 
 static void
@@ -2429,27 +2411,23 @@ output_reply (GXGenOutputContext *output_context)
   output_reply_variable_declarations (output_context);
   _C ("\n");
 
-  _C (
-       "\tg_return_val_if_fail (error == NULL || *error == NULL, %s);\n",
-       request->reply == NULL ? "FALSE" : "NULL");
+  _C ("\tg_return_val_if_fail (error == NULL || *error == NULL, %s);\n",
+      request->reply == NULL ? "FALSE" : "NULL");
 
   _C ("\n");
 
   if (request->reply)
-    _C (
-	 "\treply->connection = connection;\n\n");
+    _C ("\treply->connection = connection;\n\n");
 
   if (request->reply)
     {
-      _C (
-	   "\treply->x11_reply = (GX%s%sX11Reply *)\n"
-	   "\t\tgx_cookie_get_reply (cookie);\n",
-	   output_context->namespace->gx_cc,
-	   out_request->gx_name_cc);
+      _C ("\treply->x11_reply = (GX%s%sX11Reply *)\n"
+	  "\t\tgx_cookie_get_reply (cookie);\n",
+	  output_context->namespace->gx_cc,
+	  out_request->gx_name_cc);
 
-      _C (
-	   "\tif (!reply->x11_reply)\n"
-	   "\t  {\n");
+      _C ("\tif (!reply->x11_reply)\n"
+	  "\t  {\n");
     }
 
   /* If the cookie doesn't have an associated reply, then we see
@@ -2457,76 +2435,67 @@ output_reply (GXGenOutputContext *output_context)
    */
   /* FIXME - we need a mechanism for translating X errors into a glib
    * error domain, code and message. */
-  _C (
-      "\txcb_error = gx_cookie_get_error (cookie);\n");
+  _C ("\txcb_error = gx_cookie_get_error (cookie);\n");
   /* FIXME create a func for outputing this... */
-  _C (
-       "\tif (xcb_error)\n"
-       "\t  {\n"
-       "\t\tg_set_error (error,\n"
-       "\t\t\tGX_PROTOCOL_ERROR,\n"
-       "\t\t\tgx_protocol_error_from_xcb_generic_error (xcb_error),\n"
-       "\t\t\t\"Protocol Error\");\n"
-       "\t\treturn %s;\n"
-       "\t  }\n",
-       request->reply != NULL ? "NULL" : "FALSE");
+  _C ("\tif (xcb_error)\n"
+      "\t  {\n"
+      "\t\tg_set_error (error,\n"
+      "\t\t\tGX_PROTOCOL_ERROR,\n"
+      "\t\t\tgx_protocol_error_from_xcb_generic_error (xcb_error),\n"
+      "\t\t\t\"Protocol Error\");\n"
+      "\t\treturn %s;\n"
+      "\t  }\n",
+      request->reply != NULL ? "NULL" : "FALSE");
   /* FIXME - free reply */
   /* FIXME - check we don't skip any other function cleanup */
 
-  _C (
-       "\txcb_cookie.sequence = gx_cookie_get_sequence (cookie);\n");
+  _C ("\txcb_cookie.sequence = gx_cookie_get_sequence (cookie);\n");
 
   /* If the cookie has no associated reply or error, then we ask
    * XCB for a reply/error
    */
   if (request->reply)
     {
-      _C (
-	   "\treply->x11_reply = (GX%s%sX11Reply *)\n"
-	   "\t\txcb_%s%s_reply (\n"
-	   "\t\t\tgx_connection_get_xcb_connection (connection),\n"
-	   "\t\t\txcb_cookie,\n"
-	   "\t\t\t&xcb_error);\n",
-	   output_context->namespace->gx_cc,
-	   out_request->gx_name_cc,
-	   output_context->namespace->xcb_lc,
-	   out_request->xcb_name_lc);
+      _C ("\treply->x11_reply = (GX%s%sX11Reply *)\n"
+	  "\t\txcb_%s%s_reply (\n"
+	  "\t\t\tgx_connection_get_xcb_connection (connection),\n"
+	  "\t\t\txcb_cookie,\n"
+	  "\t\t\t&xcb_error);\n",
+	  output_context->namespace->gx_cc,
+	  out_request->gx_name_cc,
+	  output_context->namespace->xcb_lc,
+	  out_request->xcb_name_lc);
     }
   else
     {
-      _C (
-	   "\txcb_error = \n"
-	   "\t\txcb_request_check (\n"
-	   "\t\t\tgx_connection_get_xcb_connection (connection),\n"
-	   "\t\t\txcb_cookie);\n");
+      _C ("\txcb_error = \n"
+	  "\t\txcb_request_check (\n"
+	  "\t\t\tgx_connection_get_xcb_connection (connection),\n"
+	  "\t\t\txcb_cookie);\n");
     }
 
-  _C (
-       "\tif (xcb_error)\n"
-       "\t  {\n"
-       "\t\tg_set_error (error,\n"
-       "\t\t\tGX_PROTOCOL_ERROR,\n"
-       "\t\t\tgx_protocol_error_from_xcb_generic_error (xcb_error),\n"
-       "\t\t\t\"Protocol Error\");\n"
-       "\t\treturn %s;\n"
-       "\t  }\n",
-       request->reply != NULL ? "NULL" : "FALSE");
+  _C ("\tif (xcb_error)\n"
+      "\t  {\n"
+      "\t\tg_set_error (error,\n"
+      "\t\t\tGX_PROTOCOL_ERROR,\n"
+      "\t\t\tgx_protocol_error_from_xcb_generic_error (xcb_error),\n"
+      "\t\t\t\"Protocol Error\");\n"
+      "\t\treturn %s;\n"
+      "\t  }\n",
+      request->reply != NULL ? "NULL" : "FALSE");
 
 
   if (request->reply)
-    _C (
-	 "\n\t  }\n");
+    _C ("\n\t  }\n");
 
-  _C (
-       "\tgx_connection_unregister_cookie (connection, cookie);\n");
+  _C ("\tgx_connection_unregister_cookie (connection, cookie);\n");
 
   if (!request->reply)
     _C ("\treturn TRUE;\n");
   else
     _C ("\treturn reply;\n");
 
-  _C (
-       "}\n");
+  _C ("}\n");
 }
 
 void
