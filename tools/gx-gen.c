@@ -1075,7 +1075,7 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 	  extension->requests =
 	    g_list_prepend (extension->requests, request);
 
-	  fields = xgen_parse_reply_fields (state, def, elem);
+	  fields = xgen_parse_reply_fields (state, extension, elem);
 	  if (fields)
 	    {
 	      XGenReply *reply = g_new0 (XGenReply, 1);
@@ -1983,6 +1983,9 @@ output_enums (GXGenOutputContext *output_context)
     {
       XGenDefinition *def = tmp->data;
       GList *tmp2;
+      GXGenOutputNamespace *namespace;
+
+      namespace = setup_data_type_namespace (def->extension);
 
       _TD ("typedef enum\n{\n");
 
@@ -1994,14 +1997,16 @@ output_enums (GXGenOutputContext *output_context)
 
 	  if (item->type == XGEN_ITEM_AS_VALUE)
 	    {
-	      _TD (" GX_%s_%s = %s,\n",
+	      _TD (" GX_%s%s_%s = %s,\n",
+		   namespace->gx_uc,
 		   enum_prefix_uc,
 		   enum_stem_uc,
 		   item->value);
 	    }
 	  else
 	    {
-	      _TD (" GX_%s_%s = (1 << %u),\n",
+	      _TD (" GX_%s%s_%s = (1 << %u),\n",
+		   namespace->gx_uc,
 		   enum_prefix_uc,
 		   enum_stem_uc,
 		   item->bit);
@@ -2010,7 +2015,9 @@ output_enums (GXGenOutputContext *output_context)
 	  g_free (enum_stem_uc);
 	  g_free (enum_prefix_uc);
 	}
-      _TD ("} GX%s;\n\n", def->name);
+      _TD ("} GX%s%s;\n\n", namespace->gx_cc, def->name);
+
+      free_namespace (namespace);
     }
 }
 

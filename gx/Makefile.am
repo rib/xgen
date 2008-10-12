@@ -24,9 +24,9 @@ if BUILD_DPMS
 EXTENSION_XML += dpms.xml
 endif
 ##EXTENSION_XML += glx.xml
-#if BUILD_RANDR
-#EXTENSION_XML += randr.xml
-#endif
+if BUILD_RANDR
+EXTENSION_XML += randr.xml
+endif
 if BUILD_RECORD
 EXTENSION_XML += record.xml
 endif
