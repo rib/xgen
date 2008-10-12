@@ -90,6 +90,7 @@ BUILT_SOURCES = $(GENERATED_CODE)
 #libgx_@GX_MAJOR_VERSION@_@GX_MINOR_VERSION@_la_SOURCES = \
 #gx-connection.c gx-drawable.c gx-pixmap.c gx-window.c
 libgx_@GX_MAJOR_VERSION@_@GX_MINOR_VERSION@_la_SOURCES = \
+	gx-main.c \
 	gx-mask-value-item.c \
 	gx-connection.c \
 	gx-connection.h \
@@ -135,6 +136,7 @@ gxinternalincludedir = \
 gxinclude_HEADERS = gx.h
 gxinternalinclude_HEADERS = \
 	gx-types.h \
+	gx-main.h \
 	gx-mask-value-item.h \
 	gx-connection.h \
 	gx-connection-gen.h \

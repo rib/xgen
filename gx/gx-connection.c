@@ -137,7 +137,6 @@ static void disconnect_from_display (GXConnection *self);
 
 static guint gx_connection_signals[LAST_SIGNAL] = { 0 };
 
-static GMainLoop *loop;
 
 static GQuark cookie_pending_quark;
 
@@ -721,31 +720,6 @@ gx_connection_flush (GXConnection *connection, gboolean flush_server)
      else
      */
   xcb_flush (connection->priv->xcb_connection);
-}
-
-void
-gx_main (void)
-{
-
-#if 0
-  if (!gx_is_initialized)
-    {
-      g_warning ("Called gx_main() but GX wasn't initialised.  "
-		 "You must call gx_init() first.");
-      return;
-    }
-#endif
-
-  loop = g_main_loop_new (NULL, TRUE);
-
-  g_main_loop_run (loop);
-
-}
-
-void
-gx_main_quit (void)
-{
-  g_main_loop_quit (loop);
 }
 
 gboolean
