@@ -404,19 +404,23 @@ static struct _CamelCaseMapping camelcase_dictionary[] = {
   {"FONTABLE","Fontable"},
   /* {"GLYPHSET","GlyphSet"}, */
   {"CONTEXT","Context"},
+  {"COUNTER","Counter"},
   {"PICTURE","Picture"},
   {"SEGMENT","Segment"},
+  {"TRIGGER","Trigger"},
   {"BUTTON","Button"},
   {"CURSOR","Cursor"},
   {"DIRECT","Direct"},
   {"FORMAT","Format"},
   {"REGION","Region"},
   {"SCREEN","Screen"},
+  {"SYSTEM","System"},
   {"VISUAL","Visual"},
   {"DEPTH","Depth"},
   {"FIXED","Fixed"},
   {"GLYPH","Glyph"},
   {"POINT","Point"},
+  {"VALUE","Value"},
   {"ATOM","Atom"},
   {"CHAR","Char"},
   {"CODE","Code"},
@@ -429,9 +433,11 @@ static struct _CamelCaseMapping camelcase_dictionary[] = {
   {"PICT","Pict"},
   {"PROP","Prop"},
   {"SPAN","Span"},
+  {"TEST","Test"},
   {"TYPE","Type"},
   {"ARC","Arc"},
   {"FIX","Fix"},
+  {"INT","Int"},
   {"KEY","Key"},
   {"MAP","Map"},
   {"SET","Set"},
@@ -594,6 +600,9 @@ typedef struct _GXGenOutputContext
   GXGenPart			h_part;
   GXGenPart			c_part;
 } GXGenOutputContext;
+
+
+GRegex *cname_regex;
 
 
 /* Helper function to avoid casting. */
@@ -1494,7 +1503,13 @@ resolve_imports (XGenState *state)
 
 	  import = find_extension (state, import_header);
 	  if (!import)
-	    return FALSE;
+	    {
+	      g_warning ("Failed to resolve imports: "
+			 "%s imports %s which wasn't found",
+			 extension->header,
+			 import_header);
+	      return FALSE;
+	    }
 
 	  extension->imports = g_list_prepend (extension->imports, import);
 	}
@@ -1544,24 +1559,22 @@ gxgen_get_lowercase_name (const char *name)
   gint pos;
   GString *new_name;
   gchar *tmp, *ret;
+  char **strv;
+  int i;
 
   g_return_val_if_fail (name && name[0], NULL);
-  new_name = g_string_new (name);
+  new_name = g_string_new ("");
 
-  for (pos = 0; new_name->str[pos + 1]; pos++)
+  strv = g_regex_split(cname_regex, name, 0);
+  for (i = 0; strv[i]; i++)
     {
-      if (!new_name->str[pos] || !new_name->str[pos + 1])
-	break;
-
-      if ((g_ascii_islower (new_name->str[pos])
-	   && g_ascii_isupper (new_name->str[pos + 1]))
-	  || (g_ascii_isalpha (new_name->str[pos])
-	      && g_ascii_isdigit (new_name->str[pos + 1])))
-	{
-	  new_name = g_string_insert_c (new_name, pos + 1, '_');
-	  pos++;
-	}
+      char *str = strv[i];
+      if (strcmp (str, "") == 0)
+	continue;
+      new_name = g_string_append (new_name, str);
+      new_name = g_string_append_c (new_name, '_');
     }
+  new_name = g_string_set_size (new_name, new_name->len-1);
 
   tmp = g_string_free (new_name, FALSE);
   ret = g_ascii_strdown (tmp, -1);
@@ -1813,6 +1826,8 @@ static void
 output_field_xcb_reference (GXGenOutputContext *output_context,
 			    XGenFieldDefinition * field)
 {
+  if (strstr (field->definition->name, "64"))
+    g_print ("DEBUG: int64\n");
   if (strcmp (field->definition->name, "DRAWABLE") == 0)
     _C ("gx_drawable_get_xid (%s)", field->name);
   else if (strcmp (field->definition->name, "PIXMAP") == 0
@@ -2002,6 +2017,7 @@ output_enums (GXGenOutputContext *output_context)
       XGenDefinition *def = tmp->data;
       GList *tmp2;
       GXGenOutputNamespace *namespace;
+      char *name_cc;
 
       namespace = setup_data_type_namespace (def->extension);
 
@@ -2033,7 +2049,9 @@ output_enums (GXGenOutputContext *output_context)
 	  g_free (enum_stem_uc);
 	  g_free (enum_prefix_uc);
 	}
-      _TD ("} GX%s%s;\n\n", namespace->gx_cc, def->name);
+      name_cc = gxgen_get_camelcase_name (def->name);
+      _TD ("} GX%s%s;\n\n", namespace->gx_cc, name_cc);
+      g_free (name_cc);
 
       free_namespace (namespace);
     }
@@ -3003,11 +3021,11 @@ output_extension_code (GXGenOutputContext *output_context)
   output_context->h_part = GXGEN_PART_XCB_DEPENDENCIES_H;
   _H ("#include <xcb/%s.h>\n", output_context->extension->header);
 
+  output_enums (output_context);
+
   output_typedefs (output_context);
 
   output_structs_and_unions (output_context);
-
-  output_enums (output_context);
 
   output_requests (output_context);
 
@@ -3326,10 +3344,17 @@ main (int argc, char **argv)
   GList *files = NULL;
   XGenState *state;
 
+  /* The regex used for splitting CamelCase names.
+   * NB: this is taken from xcb so we get the same splitting */
+  cname_regex =
+    g_regex_new ("([A-Z0-9][a-z]+|[A-Z0-9]+(?![a-z])|[a-z]+)", 0, 0, NULL);
+
   for (i = 1; i < argc && argv[i]; i++)
     files = g_list_prepend (files, g_strdup (argv[i]));
 
   state = xgen_parse_xcb_proto_files (files);
+  if (!state)
+    g_error ("Failed to parse XCB proto files\n");
 
   g_list_foreach (files, (GFunc)g_free, NULL);
   g_list_free (files);

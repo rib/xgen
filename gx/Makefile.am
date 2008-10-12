@@ -39,17 +39,20 @@ endif
 if BUILD_SHM
 EXTENSION_XML += shm.xml
 endif
-#EXTENSION_XML += sync.xml
+if BUILD_SYNC
+EXTENSION_XML += sync.xml
+endif
 #EXTENSION_XML += xc_misc.xml
 if BUILD_XEVIE
 EXTENSION_XML += xevie.xml
 endif
 #EXTENSION_XML += xf86dri.xml
 #EXTENSION_XML += xinerama.xml
-##EXTENSION_XML += xprint.xml
-##EXTENSION_XML += xtest.xml
-##EXTENSION_XML += xvmc.xml
-##EXTENSION_XML += xv.xml
+#EXTENSION_XML += xprint.xml
+#EXTENSION_XML += xtest.xml
+#EXTENSION_XML += xv.xml
+#Depends on xv
+#EXTENSION_XML += xvmc.xml
 
 # Generate this list via:
 # find ./ -iname 'gx-*-gen.*' |cut -d'/' -f2|xargs printf '\t%s \\\n'
