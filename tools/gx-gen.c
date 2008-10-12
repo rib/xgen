@@ -742,7 +742,8 @@ xgen_parse_expression (XGenState * state, xmlNode * elem)
 
 static GList *
 xgen_parse_field_elements (XGenState * state,
-			   XGenDefinition *definition,
+			   XGenType definition_type,
+			   XGenExtension *extension,
 			   xmlNode * elem)
 {
   xmlNode *cur;
@@ -786,7 +787,7 @@ xgen_parse_field_elements (XGenState * state,
 	    {
 	      field->length = xgen_parse_expression (state, cur->children);
 	    }
-	  else if (definition->type == XGEN_REPLY)
+	  else if (definition_type == XGEN_REPLY)
 	    {
 	      XGenExpression *exp = g_new0 (XGenExpression, 1);
 	      exp->type = XGEN_FIELDREF;
@@ -819,7 +820,7 @@ xgen_parse_field_elements (XGenState * state,
 	  char *value_list_name;
 
 	  def = XGEN_DEF (valueparam);
-	  def->extension = definition->extension;
+	  def->extension = extension;
 	  def->name = g_strdup ("valueparam");
 	  def->type = XGEN_VALUEPARAM;
 
@@ -901,7 +902,7 @@ xgen_parse_item_elements (XGenState * state, xmlNode * elem)
 
 static GList *
 xgen_parse_reply_fields (XGenState * state,
-			 XGenDefinition *definition,
+			 XGenExtension *extension,
 			 xmlNode * elem)
 {
   xmlNode *cur;
@@ -920,7 +921,7 @@ xgen_parse_reply_fields (XGenState * state,
   if (!reply)
     return NULL;
 
-  return xgen_parse_field_elements (state, definition, reply);
+  return xgen_parse_field_elements (state, XGEN_REPLY, extension, reply);
 }
 
 /**
@@ -1045,9 +1046,13 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 	  def->name = g_strdup (xgen_xml_get_prop (elem, "name"));
 	  def->type = XGEN_REQUEST;
 
+	  if (strcmp (def->name, "FetchRegion") == 0)
+	    g_print ("DEBUG FetchRegion\n");
+
 	  request->opcode = opcode;
 
-	  fields = xgen_parse_field_elements (state, def, elem);
+	  fields = xgen_parse_field_elements (state, XGEN_REQUEST,
+					      extension, elem);
 	  if (!fields)
 	    {
 	      field = g_new0 (XGenFieldDefinition, 1);
@@ -1131,8 +1136,8 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 
 	  event->number = number;
 
-	  fields = xgen_parse_field_elements (state, def, elem);
-
+	  fields = xgen_parse_field_elements (state, XGEN_EVENT,
+					      extension, elem);
 	  first_byte_field = fields->data;
 	  fields = g_list_remove (fields, first_byte_field);
 
@@ -1193,7 +1198,8 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 
 	  error->number = number;
 
-	  fields = xgen_parse_field_elements (state, def, elem);
+	  fields = xgen_parse_field_elements (state, XGEN_ERROR,
+					      extension, elem);
 
 	  field = g_new0 (XGenFieldDefinition, 1);
 	  field->name = g_strdup ("response");
@@ -1246,7 +1252,8 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 	  def->type = XGEN_STRUCT;
 
 	  struct_def->fields =
-	    xgen_parse_field_elements (state, def, elem);
+	    xgen_parse_field_elements (state, XGEN_STRUCT,
+				       extension, elem);
 	  extension->structs =
 	    g_list_prepend (extension->structs, struct_def);
 	}
@@ -1260,7 +1267,8 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 	  def->type = XGEN_XIDUNION;
 
 	  xid_union->fields =
-	    xgen_parse_field_elements (state, def, elem);
+	    xgen_parse_field_elements (state, XGEN_XIDUNION,
+				       extension, elem);
 	  extension->xid_unions =
 	    g_list_prepend (extension->xid_unions, xid_union);
 	}
@@ -1274,7 +1282,8 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 	  def->type = XGEN_UNION;
 
 	  union_def->fields =
-	    xgen_parse_field_elements (state, def, elem);
+	    xgen_parse_field_elements (state, XGEN_UNION,
+				       extension, elem);
 	  extension->unions =
 	    g_list_prepend (extension->unions, union_def);
 	}
@@ -1665,42 +1674,59 @@ output_pad_field (GXGenOutputContext *output_context,
   g_free (pad_name);
 }
 
+
+/* TODO:
+ * Implement a neater way to solve the problem that "namespaces" are currently
+ * used for.
+ *
+ * Can we just add private GX fields to request/reply/error/typedef definitions
+ * and simply store the determined XCB and GX names of all the definitions
+ * up front at parse time.
+ *
+ * I.e. if there was a callback from the XGen code for each new definition
+ * that gets parsed, we could probably just have a single function for
+ * determining all the XCB and GX names.
+ *
+ * Then when we come to emit the code it's just a case of picking the right
+ * variation of the name (uppercase/lowercase, GX/XCB etc) instead of
+ * repeatedly compositing the names from namespace prefixes as we currently do.
+ */
+
 GXGenOutputNamespace *
-setup_request_namespace (GXGenOutputContext *output_context)
+setup_request_namespace (const XGenExtension *extension,
+			 const GXGenOutputObject *object)
 {
-  const XGenExtension *ext = output_context->extension;
-  const GXGenOutputObject *obj = output_context->obj;
   GXGenOutputNamespace *namespace = g_new0 (GXGenOutputNamespace, 1);
 
-  if (strcmp (ext->header, "xproto") == 0)
+  if (strcmp (extension->header, "xproto") == 0)
     {
-      namespace->gx_cc = g_strdup (obj->name_cc);
-      namespace->gx_uc = g_strdup_printf ("%s_", obj->name_uc);
-      namespace->gx_lc = g_strdup_printf ("%s_", obj->name_lc);
+      namespace->gx_cc = g_strdup (object->name_cc);
+      namespace->gx_uc = g_strdup_printf ("%s_", object->name_uc);
+      namespace->gx_lc = g_strdup_printf ("%s_", object->name_lc);
     }
   else
     {
-      char *ext_cc = gxgen_get_camelcase_name (ext->header);
-      char *ext_uc = gxgen_get_uppercase_name (ext->header);
-      char *ext_lc = gxgen_get_lowercase_name (ext->header);
+      char *extension_cc = gxgen_get_camelcase_name (extension->header);
+      char *extension_uc = gxgen_get_uppercase_name (extension->header);
+      char *extension_lc = gxgen_get_lowercase_name (extension->header);
       namespace->gx_cc =
 	g_strdup_printf ("%s%s",
-			 obj->name_cc,
-			 ext_cc);
+			 object->name_cc,
+			 extension_cc);
       namespace->gx_uc =
 	g_strdup_printf ("%s_%s_",
-			 obj->name_uc,
-			 ext_uc);
+			 object->name_uc,
+			 extension_uc);
       namespace->gx_lc =
 	g_strdup_printf ("%s_%s_",
-			 obj->name_lc,
-			 ext_lc);
-      g_free (ext_cc);
-      g_free (ext_uc);
-      g_free (ext_lc);
+			 object->name_lc,
+			 extension_lc);
+      g_free (extension_cc);
+      g_free (extension_uc);
+      g_free (extension_lc);
     }
 
-  if (strcmp (ext->header, "xproto") == 0)
+  if (strcmp (extension->header, "xproto") == 0)
     {
       namespace->xcb_lc = g_strdup ("");
       namespace->xcb_cc = g_strdup ("");
@@ -1708,25 +1734,24 @@ setup_request_namespace (GXGenOutputContext *output_context)
     }
   else
     {
-      char *ext_lc = gxgen_get_lowercase_name (ext->header);
+      char *extension_lc = gxgen_get_lowercase_name (extension->header);
       namespace->xcb_lc =
-	g_strdup_printf ("%s_", ext_lc);
+	g_strdup_printf ("%s_", extension_lc);
       namespace->xcb_cc = g_strdup ("FIXME");
       namespace->xcb_uc = g_strdup ("FIXME");
 
-      g_free (ext_lc);
+      g_free (extension_lc);
     }
 
   return namespace;
 }
 
 GXGenOutputNamespace *
-setup_data_type_namespace (GXGenOutputContext *output_context)
+setup_data_type_namespace (const XGenExtension *extension)
 {
-  const XGenExtension *ext = output_context->extension;
   GXGenOutputNamespace *namespace = g_new0 (GXGenOutputNamespace, 1);
 
-  if (strcmp (ext->header, "xproto") == 0)
+  if (strcmp (extension->header, "xproto") == 0)
     {
       namespace->gx_lc = g_strdup ("");
       namespace->gx_uc = g_strdup ("");
@@ -1734,12 +1759,12 @@ setup_data_type_namespace (GXGenOutputContext *output_context)
     }
   else
     {
-      namespace->gx_cc = gxgen_get_camelcase_name (ext->header);
-      namespace->gx_uc = gxgen_get_uppercase_name (ext->header);
-      namespace->gx_lc = gxgen_get_lowercase_name (ext->header);
+      namespace->gx_cc = gxgen_get_camelcase_name (extension->header);
+      namespace->gx_uc = gxgen_get_uppercase_name (extension->header);
+      namespace->gx_lc = gxgen_get_lowercase_name (extension->header);
     }
 
-  if (strcmp (ext->header, "xproto") == 0)
+  if (strcmp (extension->header, "xproto") == 0)
     {
       namespace->xcb_lc = g_strdup ("");
       namespace->xcb_uc = g_strdup ("");
@@ -1747,14 +1772,14 @@ setup_data_type_namespace (GXGenOutputContext *output_context)
     }
   else
     {
-      char *ext_lc = gxgen_get_lowercase_name (ext->header);
+      char *extension_lc = gxgen_get_lowercase_name (extension->header);
 
       namespace->xcb_lc =
-	g_strdup_printf ("%s_", ext_lc);
+	g_strdup_printf ("%s_", extension_lc);
       namespace->xcb_cc = g_strdup ("FIXME");
       namespace->xcb_uc = g_strdup ("FIXME");
 
-      g_free (ext_lc);
+      g_free (extension_lc);
     }
 
   return namespace;
@@ -1797,7 +1822,7 @@ output_field_xcb_reference (GXGenOutputContext *output_context,
 	       || field->definition->type == XGEN_UNION))
     {
       GXGenOutputNamespace *namespace =
-	setup_data_type_namespace (output_context);
+	setup_data_type_namespace (field->definition->extension);
       char * type_lc = gxgen_get_lowercase_name (field->definition->name);
       /* NB: XCB passes structures by value,
        * while GX passes them by reference */
@@ -2152,8 +2177,12 @@ output_reply_list_get (GXGenOutputContext *output_context)
   if (field->length->type != XGEN_FIELDREF)
     return;
 
-  _CH ("GArray *\n"
-       "gx_%s%s_get_%s (GX%s%sReply *%s_reply)",
+  if (is_special_xid_definition (field->definition))
+    _CH ("GList *\n");
+  else
+    _CH ("GArray *\n");
+
+  _CH ("gx_%s%s_get_%s (GX%s%sReply *%s_reply)",
        output_context->namespace->gx_lc,
        out_request->gx_name_lc,
        field->name,
@@ -2169,21 +2198,21 @@ output_reply_list_get (GXGenOutputContext *output_context)
       gxgen_definition_to_gx_type (field->definition, FALSE),
       out_request->gx_name_lc);
 
-  _C ("  GArray *tmp;\n");
+  if (is_special_xid_definition (field->definition))
+    _C ("  GList *tmp = NULL;\n");
+  else
+    _C ("  GArray *tmp;\n");
 
   _C ("\n");
 
-  _C ("/* It's possible the connection has been closed since the reply\n"
-      " * was recieved: (the reply struct contains weak pointer) */\n"
+  _C ("  /* It's possible the connection has been closed since the reply\n"
+      "   * was recieved: (the reply struct contains weak pointer) */\n"
       "  if (!%s_reply->connection)\n"
       "    return NULL;\n",
       out_request->gx_name_lc);
 
   if (is_special_xid_definition (field->definition))
-    {
-      _C ("  tmp = g_array_new (TRUE, FALSE, sizeof(void *));\n");
-      _C ("  int i;\n");
-    }
+    _C ("  int i;\n");
   else
     _C ("  tmp = g_array_new (TRUE, FALSE, sizeof(%s));\n",
         gxgen_definition_to_gx_type (field->definition, FALSE));
@@ -2209,15 +2238,17 @@ output_reply_list_get (GXGenOutputContext *output_context)
        "			     \"wrap\", TRUE,\n"
        "			     NULL);\n",
        obj->name_lc, out_request->gx_name_lc);
-
-      _C ("      tmp = g_array_append_val (tmp, item);\n"
-	  "    }\n");
+      _C ("      tmp = g_list_prepend (tmp, item);\n");
+      _C ("    }\n");
     }
   else
     {
       _C ("  tmp = g_array_append_vals (tmp, p, %s_reply->x11_reply->%s);\n",
 	  out_request->gx_name_lc, field->length->field);
     }
+
+  if (is_special_xid_definition (field->definition))
+    _C ("  tmp = g_list_reverse (tmp);");
 
   _C ("  return tmp;\n");
 
@@ -2243,28 +2274,27 @@ output_reply_list_free (GXGenOutputContext *output_context)
   if (field->length->type != XGEN_FIELDREF)
     return;
 
-  _CH ("\nvoid\n"
-       "gx_%s%s_free_%s (GArray *%s)",
+  _CH ("\nvoid\n");
+  _CH ("gx_%s%s_free_%s (",
        output_context->namespace->gx_lc,
        out_request->gx_name_lc,
-       field->name,
        field->name);
+  if (is_special_xid_definition (field->definition))
+    _CH ("GList *%s)", field->name);
+  else
+    _CH ("GArray *%s)", field->name);
 
   _H (";\n");
   _C ("\n{\n");
 
   if (is_special_xid_definition (field->definition))
     {
-      _C ("\t%s*p = %s->data;\n"
-	  "\tint i;\n"
-	  "\tfor (i = 0; i < %s->len; i++)\n"
-	  "\t\tg_object_unref (p[i]);\n",
-	  gxgen_definition_to_gx_type (field->definition, TRUE),
-	  field->name,
+      _C ("\n"
+	  "\tg_list_foreach (%s, (GFunc)g_object_unref, NULL);\n",
 	  field->name);
     }
-
-  _C ("\tg_array_free (%s, TRUE);\n", field->name);
+  else
+    _C ("\tg_array_free (%s, TRUE);\n", field->name);
 
   _C ("}\n");
 }
@@ -2814,7 +2844,8 @@ output_requests (GXGenOutputContext *output_context)
       output_context->h_typedef_part = obj->h_typedefs;
       output_context->h_part = obj->h_protos;
 
-      namespace = setup_request_namespace (output_context);
+      namespace = setup_request_namespace (output_context->extension,
+					   output_context->obj);
       output_context->namespace = namespace;
 
       /* the get/set_property names clash with the gobject
@@ -2887,7 +2918,7 @@ output_event_typedefs (GXGenOutputContext *output_context)
       GList *tmp2;
       GXGenOutputNamespace *namespace;
 
-      namespace = setup_data_type_namespace (output_context);
+      namespace = setup_data_type_namespace (event_def->extension);
 
       _TD ("\ntypedef struct {\n");
 

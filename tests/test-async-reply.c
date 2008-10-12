@@ -15,10 +15,9 @@ test_async_reply (TestGXSimpleFixture *fixture,
   GXWindow *root;
   GXCookie *cookie;
   GXWindowQueryTreeReply *query_tree;
-  GArray *array;
-  GXWindow **children;
+  GList *children;
+  GList *tmp;
   GXWindow *child;
-  int i;
 
   g_type_init ();
 
@@ -38,15 +37,14 @@ test_async_reply (TestGXSimpleFixture *fixture,
 
   query_tree = gx_window_query_tree_reply (cookie, NULL);
 
-  array = gx_window_query_tree_get_children (query_tree);
-  children = (GXWindow **)array->data;
-  for (i = 0; i < array->len; i++)
+  children = gx_window_query_tree_get_children (query_tree);
+  for (tmp = children; tmp != NULL; tmp = tmp->next)
     {
-      child = children[i];
+      child = tmp->data;
       g_print ("child of root (0x%08x)\n",
 	       gx_drawable_get_xid (GX_DRAWABLE (child)));
     }
-  gx_window_query_tree_free_children (array);
+  gx_window_query_tree_free_children (children);
 
   gx_window_query_tree_reply_free (query_tree);
 

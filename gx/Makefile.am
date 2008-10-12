@@ -9,19 +9,27 @@ endif
 if BUILD_RENDER
 EXTENSION_XML += render.xml
 endif
-#if BUILD_XFIXES
-### depends on shape + render
-#EXTENSION_XML += xfixes.xml
-#endif
-## depends on fixes
-#EXTENSION_XML += composite.xml
-#EXTENSION_XML += damage.xml
+if BUILD_XFIXES
+# depends on shape + render
+EXTENSION_XML += xfixes.xml
+endif
+# depends on fixes
+if BUILD_COMPOSITE
+EXTENSION_XML += composite.xml
+endif
+if BUILD_DAMAGE
+EXTENSION_XML += damage.xml
+endif
 if BUILD_DPMS
 EXTENSION_XML += dpms.xml
 endif
 ##EXTENSION_XML += glx.xml
-##EXTENSION_XML += randr.xml
-#EXTENSION_XML += record.xml
+#if BUILD_RANDR
+#EXTENSION_XML += randr.xml
+#endif
+if BUILD_RECORD
+EXTENSION_XML += record.xml
+endif
 if BUILD_RES
 EXTENSION_XML += res.xml
 endif
@@ -29,7 +37,7 @@ endif
 if BUILD_SHM
 EXTENSION_XML += shm.xml
 endif
-##EXTENSION_XML += sync.xml
+#EXTENSION_XML += sync.xml
 #EXTENSION_XML += xc_misc.xml
 if BUILD_XEVIE
 EXTENSION_XML += xevie.xml
