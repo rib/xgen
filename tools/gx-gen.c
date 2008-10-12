@@ -408,6 +408,7 @@ static struct _CamelCaseMapping camelcase_dictionary[] = {
   {"SEGMENT","Segment"},
   {"BUTTON","Button"},
   {"CURSOR","Cursor"},
+  {"DIRECT","Direct"},
   {"FORMAT","Format"},
   {"REGION","Region"},
   {"SCREEN","Screen"},
@@ -420,11 +421,14 @@ static struct _CamelCaseMapping camelcase_dictionary[] = {
   {"CHAR","Char"},
   {"CODE","Code"},
   {"FONT","Font"},
+  {"FORM","Form"},
   {"HOST","Host"},
   {"KIND","Kind"},
   {"INFO","Info"},
+  {"LINE","Line"},
   {"PICT","Pict"},
   {"PROP","Prop"},
+  {"SPAN","Span"},
   {"TYPE","Type"},
   {"ARC","Arc"},
   {"FIX","Fix"},
@@ -638,28 +642,25 @@ xgen_find_type_in_extension (XGenExtension *extension, char *type_name)
 }
 
 static XGenDefinition *
-xgen_find_type (XGenState * state, char *name)
+xgen_find_type (const XGenState * state,
+		const XGenExtension *current_extension,
+		const char *name)
 {
   GList *tmp;
   char **bits;
-  char *extension_name = NULL;
+  char *extension_header = NULL;
   char *type_name;
-  XGenExtension *current_extension;
-
-  /* NB: The head of state->extensions will correspond to the
-   * extension currently being parsed */
-  current_extension = state->extensions->data;
 
   bits = g_strsplit (name, ":", 2);
 
   if (bits[1] != NULL)
     {
-      extension_name = bits[0];
+      extension_header = bits[0];
       type_name = bits[1];
     }
   else
     {
-      extension_name = current_extension->name;
+      extension_header = current_extension->header;
       type_name = bits[0];
     }
 
@@ -668,7 +669,7 @@ xgen_find_type (XGenState * state, char *name)
   for (tmp = state->extensions; tmp != NULL; tmp = tmp->next)
     {
       XGenExtension *extension = tmp->data;
-      if (strcmp (extension->header, extension_name) == 0)
+      if (strcmp (extension->header, extension_header) == 0)
 	{
 	  XGenDefinition *def =
 	    xgen_find_type_in_extension (extension, type_name);
@@ -759,7 +760,7 @@ xgen_parse_field_elements (XGenState * state,
 	{
 	  char *bytes = xgen_xml_get_prop (cur, "bytes");
 	  field->name = "pad";
-	  field->definition = xgen_find_type (state, "CARD8");
+	  field->definition = xgen_find_type (state, extension, "CARD8");
 	  field->length = g_new0 (XGenExpression, 1);
 	  field->length->type = XGEN_VALUE;
 	  field->length->value = atoi (bytes);
@@ -771,6 +772,7 @@ xgen_parse_field_elements (XGenState * state,
 	  field->name = strdup (name);
 	  field->definition =
 	    xgen_find_type (state,
+			    extension,
 			    xgen_xml_get_prop (cur, "type"));
 	  xmlFree (name);
 	}
@@ -780,7 +782,7 @@ xgen_parse_field_elements (XGenState * state,
 	  char *type = xgen_xml_get_prop (cur, "type");
 	  field->name = strdup (name);
 	  xmlFree (name);
-	  field->definition = xgen_find_type (state, type);
+	  field->definition = xgen_find_type (state, extension, type);
 	  xmlFree (type);
 
 	  if (cur->children)
@@ -801,7 +803,8 @@ xgen_parse_field_elements (XGenState * state,
 
 	      len_field = g_new0 (XGenFieldDefinition, 1);
 	      len_field->name = g_strdup_printf ("%s_len", field->name);
-	      len_field->definition = xgen_find_type (state, "CARD32");
+	      len_field->definition =
+		xgen_find_type (state, extension, "CARD32");
 
 	      fields = g_list_prepend (fields, len_field);
 
@@ -825,7 +828,8 @@ xgen_parse_field_elements (XGenState * state,
 	  def->type = XGEN_VALUEPARAM;
 
 	  value_mask_type = xgen_xml_get_prop (cur, "value-mask-type");
-	  valueparam->reference = xgen_find_type (state, value_mask_type);
+	  valueparam->reference =
+	    xgen_find_type (state, extension, value_mask_type);
 	  xmlFree (value_mask_type);
 
 	  value_mask_name = xgen_xml_get_prop (cur, "value-mask-name");
@@ -1046,8 +1050,9 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 	  def->name = g_strdup (xgen_xml_get_prop (elem, "name"));
 	  def->type = XGEN_REQUEST;
 
-	  if (strcmp (def->name, "FetchRegion") == 0)
-	    g_print ("DEBUG FetchRegion\n");
+	  if (strcmp (extension->header, "xevie") == 0
+	      && strcmp (def->name, "Send") == 0)
+	    g_print ("DEBUG xevie send\n");
 
 	  request->opcode = opcode;
 
@@ -1057,18 +1062,21 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 	    {
 	      field = g_new0 (XGenFieldDefinition, 1);
 	      field->name = g_strdup ("pad");
-	      field->definition = xgen_find_type (state, "CARD8");
+	      field->definition =
+		xgen_find_type (state, extension, "CARD8");
 	      fields = g_list_prepend (fields, field);
 	    }
 
 	  field = g_new0 (XGenFieldDefinition, 1);
 	  field->name = g_strdup ("length");
-	  field->definition = xgen_find_type (state, "CARD16");
+	  field->definition =
+	    xgen_find_type (state, extension, "CARD16");
 	  fields = g_list_prepend (fields, field);
 
 	  field = g_new0 (XGenFieldDefinition, 1);
 	  field->name = g_strdup ("opcode");
-	  field->definition = xgen_find_type (state, "BYTE");
+	  field->definition =
+	    xgen_find_type (state, extension, "BYTE");
 	  fields = g_list_prepend (fields, field);
 
 	  request->fields = fields;
@@ -1091,19 +1099,22 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 
 	      field = g_new0 (XGenFieldDefinition, 1);
 	      field->name = g_strdup ("length");
-	      field->definition = xgen_find_type (state, "CARD32");
+	      field->definition =
+		xgen_find_type (state, extension, "CARD32");
 	      fields = g_list_prepend (fields, field);
 
 	      field = g_new0 (XGenFieldDefinition, 1);
 	      field->name = g_strdup ("sequence");
-	      field->definition = xgen_find_type (state, "CARD16");
+	      field->definition =
+		xgen_find_type (state, extension, "CARD16");
 	      fields = g_list_prepend (fields, field);
 
 	      fields = g_list_prepend (fields, first_byte_field);
 
 	      field = g_new0 (XGenFieldDefinition, 1);
 	      field->name = g_strdup ("response_type");
-	      field->definition = xgen_find_type (state, "BYTE");
+	      field->definition =
+		xgen_find_type (state, extension, "BYTE");
 	      fields = g_list_prepend (fields, field);
 
 	      reply->fields = fields;
@@ -1147,7 +1158,7 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 	    {
 	      field = g_new0 (XGenFieldDefinition, 1);
 	      field->name = g_strdup ("sequence");
-	      field->definition = xgen_find_type (state, "CARD16");
+	      field->definition = xgen_find_type (state, extension, "CARD16");
 	      fields = g_list_prepend (fields, field);
 	    }
 
@@ -1155,7 +1166,7 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 
 	  field = g_new0 (XGenFieldDefinition, 1);
 	  field->name = g_strdup ("response_type");
-	  field->definition = xgen_find_type (state, "BYTE");
+	  field->definition = xgen_find_type (state, extension, "BYTE");
 	  fields = g_list_prepend (fields, field);
 
 	  event->fields = fields;
@@ -1177,6 +1188,7 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 
 	  copy_of =
 	    XGEN_EVENT_DEF (xgen_find_type (state,
+					    extension,
 					    xgen_xml_get_prop (elem, "ref")));
 	  event->fields = copy_of->fields;
 	  /* So that we don't double free the fields: */
@@ -1203,17 +1215,17 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 
 	  field = g_new0 (XGenFieldDefinition, 1);
 	  field->name = g_strdup ("response");
-	  field->definition = xgen_find_type (state, "BYTE");
+	  field->definition = xgen_find_type (state, extension, "BYTE");
 	  fields = g_list_prepend (fields, field);
 
 	  field = g_new0 (XGenFieldDefinition, 1);
 	  field->name = g_strdup ("error_code");
-	  field->definition = xgen_find_type (state, "BYTE");
+	  field->definition = xgen_find_type (state, extension, "BYTE");
 	  fields = g_list_prepend (fields, field);
 
 	  field = g_new0 (XGenFieldDefinition, 1);
 	  field->name = g_strdup ("sequence");
-	  field->definition = xgen_find_type (state, "CARD16");
+	  field->definition = xgen_find_type (state, extension, "CARD16");
 	  fields = g_list_prepend (fields, field);
 
 	  error->fields = fields;
@@ -1235,6 +1247,7 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 
 	  copy_of =
 	    XGEN_ERROR_DEF (xgen_find_type (state,
+					    extension,
 					    xgen_xml_get_prop (elem, "ref")));
 	  error->fields = copy_of->fields;
 	  /* So that we don't double free the fields: */
@@ -1316,23 +1329,20 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
       else if (strcmp (xgen_xml_get_node_name (elem), "typedef") == 0)
 	{
 	  XGenTypedef *typedef_def = g_new0 (XGenTypedef, 1);
+	  char *oldname;
 
 	  def = XGEN_DEF (typedef_def);
 	  def->extension = extension;
 	  def->name = g_strdup (xgen_xml_get_prop (elem, "newname"));
 	  def->type = XGEN_TYPEDEF;
 
+	  oldname = xgen_xml_get_prop (elem, "oldname");
 	  typedef_def->reference =
-	    xgen_find_type (state, xgen_xml_get_prop (elem, "oldname"));
+	    xgen_find_type (state, extension, oldname);
+	  xmlFree (oldname);
 
 	  extension->typedefs =
 	    g_list_prepend (extension->typedefs, typedef_def);
-	}
-      else if (strcmp (xgen_xml_get_node_name (elem), "import") == 0)
-	{
-	  extension->imports =
-	    g_list_prepend (extension->imports,
-			    xgen_xml_get_node_content (elem));
 	}
 
       if (def)
@@ -1592,89 +1602,6 @@ gxgen_get_camelcase_name (const char *name)
   return name_cc;
 }
 
-static char *
-gxgen_definition_to_gx_type (XGenDefinition * definition,
-			     gboolean object_types)
-{
-  struct _TypeMapping *mapping;
-  char *name_cc;
-  char *ret;
-
-  for (mapping = core_type_mappings; mapping->from != NULL; mapping++)
-    if (strcmp (mapping->from, definition->name) == 0)
-      return g_strdup (mapping->to);
-
-  if (strcmp (definition->name, "WINDOW") == 0)
-    return g_strdup (object_types ? "GXWindow *" : "guint32");
-  else if (strcmp (definition->name, "DRAWABLE") == 0)
-    return g_strdup (object_types ? "GXDrawable *" : "guint32");
-  else if (strcmp (definition->name, "PIXMAP") == 0)
-    return g_strdup (object_types ? "GXPixmap *" : "guint32");
-  else if (strcmp (definition->name, "GCONTEXT") == 0)
-    return g_strdup (object_types ? "GXGContext *" : "guint32");
-
-  name_cc = gxgen_get_camelcase_name (definition->name);
-  ret = g_strdup_printf ("GX%s", name_cc);
-  g_free (name_cc);
-
-  return ret;
-}
-
-static void
-out (GXGenOutputContext *output_context,
-     GXGenPart part,
-     const char *format, ...)
-{
-  va_list ap;
-
-  va_start (ap, format);
-  g_string_append_vprintf (output_context->parts[part], format, ap);
-  va_end (ap);
-}
-
-/**
- * out2:
- *
- * This is a convenience function that can output to two gstring parts. This
- * can be handy for function prototypes that need to be emitted to a header
- * file and a C file.
- */
-static void
-out2 (GXGenOutputContext *output_context,
-      GXGenPart part0,
-      GXGenPart part1,
-      const char *format, ...)
-{
-  va_list ap;
-
-  va_start (ap, format);
-  g_string_append_vprintf (output_context->parts[part0], format, ap);
-  g_string_append_vprintf (output_context->parts[part1], format, ap);
-  va_end (ap);
-}
-
-/* NB: This function assumes you are outputting to the typedef section of the
- * current header */
-static void
-output_pad_field (GXGenOutputContext *output_context,
-		  XGenFieldDefinition *field,
-		  int index)
-{
-  char *type_name_cc;
-  char *pad_name;
-
-  if (field->length->value == 1)
-    pad_name = g_strdup_printf ("pad%u", index);
-  else
-    pad_name = g_strdup_printf ("pad%u[%lu]", index, field->length->value);
-
-  type_name_cc = gxgen_definition_to_gx_type (field->definition, FALSE);
-  _TD ("\t%s %s;\n", type_name_cc, pad_name);
-  g_free (type_name_cc);
-  g_free (pad_name);
-}
-
-
 /* TODO:
  * Implement a neater way to solve the problem that "namespaces" are currently
  * used for.
@@ -1797,7 +1724,90 @@ free_namespace (GXGenOutputNamespace *namespace)
   g_free (namespace);
 }
 
+static char *
+gxgen_definition_to_gx_type (XGenDefinition * definition,
+			     gboolean object_types)
+{
+  struct _TypeMapping *mapping;
+  char *name_cc;
+  char *ret;
+  GXGenOutputNamespace *namespace;
 
+  for (mapping = core_type_mappings; mapping->from != NULL; mapping++)
+    if (strcmp (mapping->from, definition->name) == 0)
+      return g_strdup (mapping->to);
+
+  if (strcmp (definition->name, "WINDOW") == 0)
+    return g_strdup (object_types ? "GXWindow *" : "guint32");
+  else if (strcmp (definition->name, "DRAWABLE") == 0)
+    return g_strdup (object_types ? "GXDrawable *" : "guint32");
+  else if (strcmp (definition->name, "PIXMAP") == 0)
+    return g_strdup (object_types ? "GXPixmap *" : "guint32");
+  else if (strcmp (definition->name, "GCONTEXT") == 0)
+    return g_strdup (object_types ? "GXGContext *" : "guint32");
+
+  namespace = setup_data_type_namespace (definition->extension);
+
+  name_cc = gxgen_get_camelcase_name (definition->name);
+  ret = g_strdup_printf ("GX%s%s", namespace->gx_cc, name_cc);
+  g_free (name_cc);
+
+  return ret;
+}
+
+static void
+out (GXGenOutputContext *output_context,
+     GXGenPart part,
+     const char *format, ...)
+{
+  va_list ap;
+
+  va_start (ap, format);
+  g_string_append_vprintf (output_context->parts[part], format, ap);
+  va_end (ap);
+}
+
+/**
+ * out2:
+ *
+ * This is a convenience function that can output to two gstring parts. This
+ * can be handy for function prototypes that need to be emitted to a header
+ * file and a C file.
+ */
+static void
+out2 (GXGenOutputContext *output_context,
+      GXGenPart part0,
+      GXGenPart part1,
+      const char *format, ...)
+{
+  va_list ap;
+
+  va_start (ap, format);
+  g_string_append_vprintf (output_context->parts[part0], format, ap);
+  g_string_append_vprintf (output_context->parts[part1], format, ap);
+  va_end (ap);
+}
+
+/* NB: This function assumes you are outputting to the typedef section of the
+ * current header */
+static void
+output_pad_field (GXGenOutputContext *output_context,
+		  XGenFieldDefinition *field,
+		  int index)
+{
+  char *type_name_cc;
+  char *pad_name;
+
+  if (field->length->value == 1)
+    pad_name = g_strdup_printf ("pad%u", index);
+  else
+    pad_name = g_strdup_printf ("pad%u[%lu]", index, field->length->value);
+
+  type_name_cc = gxgen_definition_to_gx_type (field->definition, FALSE);
+  _TD ("\t%s %s;\n", type_name_cc, pad_name);
+  g_free (type_name_cc);
+  g_free (pad_name);
+}
 
 static void
 output_field_xcb_reference (GXGenOutputContext *output_context,
@@ -1928,6 +1938,8 @@ output_structs_and_unions (GXGenOutputContext *output_context)
       XGenDefinition *def = tmp->data;
       guint pad = 0;
       GList *tmp2;
+      GXGenOutputNamespace *namespace;
+      char *name_cc;
 
       if (def->type != XGEN_STRUCT && def->type != XGEN_UNION)
 	continue;
@@ -1936,6 +1948,8 @@ output_structs_and_unions (GXGenOutputContext *output_context)
        * objects */
       if (strcmp (def->name, "SCREEN") == 0)
 	continue;
+
+      namespace = setup_data_type_namespace (def->extension);
 
       _TD ("typedef %s {\n",
 	   def->type == XGEN_STRUCT ? "struct" : "union");
@@ -1964,8 +1978,12 @@ output_structs_and_unions (GXGenOutputContext *output_context)
 	    }
 	}
 
-      _TD ("");
-      _TD ("} %s;\n\n", gxgen_definition_to_gx_type (def, FALSE));
+      /* _TD (""); */
+      name_cc = gxgen_get_camelcase_name (def->name);
+      _TD ("} GX%s%s;\n\n", namespace->gx_cc, name_cc);
+      g_free (name_cc);
+
+      free_namespace (namespace);
     }
   _TD ("\n");
 }
@@ -2392,6 +2410,10 @@ output_async_request (GXGenOutputContext *output_context)
   GList *tmp;
   char *cookie_type_uc;
   gboolean has_mask_value_items = FALSE;
+
+  if (strcmp (output_context->extension->header, "xevie") == 0
+      && strcmp (XGEN_DEF (request)->name, "Send") == 0)
+    g_print ("DEBUG xevie send\n");
 
   _CH ("\nGXCookie *\ngx_%s%s_async (%s",
        output_context->namespace->gx_lc,

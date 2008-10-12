@@ -33,7 +33,9 @@ endif
 if BUILD_RES
 EXTENSION_XML += res.xml
 endif
-##EXTENSION_XML += screensaver.xml
+if BUILD_SCREENSAVER
+EXTENSION_XML += screensaver.xml
+endif
 if BUILD_SHM
 EXTENSION_XML += shm.xml
 endif
@@ -71,6 +73,7 @@ GENERATED_CODE = \
 $(GENERATED_CODE): $(EXTENSION_XML) $(top_builddir)/tools/gx-gen
 	echo "generating $@"
 	$(top_builddir)/tools/gx-gen $(EXTENSION_XML)
+	indent $(GENERATED_CODE)
 BUILT_SOURCES = $(GENERATED_CODE)
 
 #.PHONY: generated-code
