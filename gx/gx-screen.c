@@ -18,7 +18,8 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ * MA  02110-1301, USA.
  * </license>
  *
  */
@@ -28,7 +29,8 @@
 #include <gx/gx-window.h>
 
 /* Macros and defines */
-#define GX_SCREEN_GET_PRIVATE(object)(G_TYPE_INSTANCE_GET_PRIVATE ((object), GX_TYPE_SCREEN, GXScreenPrivate))
+#define GX_SCREEN_GET_PRIVATE(object) \
+  (G_TYPE_INSTANCE_GET_PRIVATE ((object), GX_TYPE_SCREEN, GXScreenPrivate))
 
 #if 0
 enum
@@ -79,18 +81,15 @@ static void gx_screen_init (GXScreen * self);
 static void gx_screen_finalize (GObject * self);
 
 
-static GObjectClass *parent_class = NULL;
 /* static guint gx_screen_signals[LAST_SIGNAL] = { 0 }; */
 
 G_DEFINE_TYPE (GXScreen, gx_screen, G_TYPE_OBJECT);
 
 static void
-gx_screen_class_init (GXScreenClass * klass)	/* Class Initialization */
+gx_screen_class_init (GXScreenClass * klass)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
   /* GParamSpec *new_param; */
-
-  parent_class = g_type_class_peek_parent (klass);
 
   gobject_class->finalize = gx_screen_finalize;
 
@@ -187,7 +186,7 @@ gx_screen_set_property (GObject * object,
     }
 }
 
-#if 0				/* template code */
+#if 0
 static void
 gx_screen_mydoable_interface_init (gpointer interface, gpointer data)
 {
@@ -199,7 +198,6 @@ gx_screen_mydoable_interface_init (gpointer interface, gpointer data)
 }
 #endif
 
-/* Instance Construction */
 static void
 gx_screen_init (GXScreen * self)
 {
@@ -207,19 +205,17 @@ gx_screen_init (GXScreen * self)
   /* populate your object here */
 }
 
-/* Instantiation wrapper */
 GXScreen *
 gx_screen_new (void)
 {
   return GX_SCREEN (g_object_new (gx_screen_get_type (), NULL));
 }
 
-/* Instance Destruction */
 void
 gx_screen_finalize (GObject * object)
 {
   /* GXScreen *self = GX_SCREEN(object); */
 
   /* destruct your object here */
-  G_OBJECT_CLASS (parent_class)->finalize (object);
+  G_OBJECT_CLASS (gx_screen_parent_class)->finalize (object);
 }

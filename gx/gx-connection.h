@@ -42,7 +42,7 @@ typedef struct _GXDrawable          GXDrawable;
 #endif
 
 #ifndef GX_PIXMAP_TYPEDEF
-typedef struct _GXPixmp             GXPixmap;
+typedef struct _GXPixmap             GXPixmap;
 #define GX_PIXMAP_TYPEDEF
 #endif
 

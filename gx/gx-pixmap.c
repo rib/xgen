@@ -18,17 +18,21 @@
  *
  * You should have received a copy of the GNU General Public License
  * along with this program; if not, write to the Free Software
- * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA  02110-1301, USA.
+ * Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+ * MA  02110-1301, USA.
  * </license>
  *
  */
 
 #include <gx/gx-pixmap.h>
+#include <gx/gx-connection.h>
+#include <gx/gx-protocol-error.h>
 
 #include <string.h>
 
 /* Macros and defines */
-#define GX_PIXMAP_GET_PRIVATE(object)(G_TYPE_INSTANCE_GET_PRIVATE ((object), GX_TYPE_PIXMAP, GXPixmapPrivate))
+#define GX_PIXMAP_GET_PRIVATE(object) \
+    (G_TYPE_INSTANCE_GET_PRIVATE ((object), GX_TYPE_PIXMAP, GXPixmapPrivate))
 
 #if 0
 enum
@@ -196,7 +200,7 @@ gx_pixmap_init (GXPixmap * self)
 GXPixmap *
 gx_pixmap_new (void)
 {
-  return GX_PIXMAP (g_object_new (gx_pixmap_get_type (), NULL));
+  return GX_PIXMAP (g_object_new (GX_TYPE_PIXMAP, NULL));
 }
 
 /* Instance Destruction */

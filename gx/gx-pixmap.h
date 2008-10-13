@@ -28,8 +28,10 @@
 
 #include <gx/gx-drawable.h>
 
-#include <glib.h>
 #include <glib-object.h>
+#include <glib.h>
+
+#include <gx/gx-xcb-dependencies-gen.h>
 
 G_BEGIN_DECLS
 
@@ -40,7 +42,7 @@ G_BEGIN_DECLS
 #define GX_IS_PIXMAP_CLASS(klass) (G_TYPE_CHECK_CLASS_TYPE ((klass), GX_TYPE_PIXMAP))
 #define GX_PIXMAP_GET_CLASS(obj)  (G_TYPE_INSTANCE_GET_CLASS ((obj), GX_TYPE_PIXMAP, GXPixmapClass))
 
-#ifndef GX_DRAWABLE_TYPEDEF
+#ifndef GX_PIXMAP_TYPEDEF
 typedef struct _GXPixmap	GXPixmap;
 #define GX_PIXMAP_TYPEDEF
 #endif

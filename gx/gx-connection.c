@@ -36,7 +36,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-/* Macros and defines */
 #define GX_CONNECTION_GET_PRIVATE(object) \
   (G_TYPE_INSTANCE_GET_PRIVATE ((object), GX_TYPE_CONNECTION, GXConnectionPrivate))
 
@@ -117,7 +116,6 @@ struct _GXConnectionPrivate
 };
 
 
-/* Function definitions */
 static void gx_connection_get_property (GObject *object,
 					guint id,
 					GValue *value,
@@ -265,7 +263,6 @@ static void
 gx_connection_init (GXConnection *self)
 {
   self->priv = GX_CONNECTION_GET_PRIVATE (self);
-  /* populate your object here */
 
   self->priv->events_queue = g_queue_new ();
   self->priv->response_queue = g_queue_new ();

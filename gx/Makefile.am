@@ -98,6 +98,8 @@ libgx_@GX_MAJOR_VERSION@_@GX_MINOR_VERSION@_la_SOURCES = \
 	gx-drawable.h \
 	gx-window.c \
 	gx-window.h \
+	gx-pixmap.c \
+	gx-pixmap.h \
 	gx-gcontext.c \
 	gx-gcontext.h \
 	gx-screen.c \

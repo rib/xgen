@@ -1,5 +1,8 @@
 SUBDIRS = tools gx tests
-#SUBDIRS += doc
+
+if BUILD_GTK_DOC
+SUBDIRS += doc
+endif
 
 pcfiles = gx-@GX_MAJOR_VERSION@.@GX_MINOR_VERSION@.pc
 
