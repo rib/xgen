@@ -1,4 +1,5 @@
 noinst_PROGRAMS = test-gx
+# rendertest
 
 test_gx_SOURCES = \
 	test-gx-main.c \
@@ -8,7 +9,11 @@ test_gx_SOURCES = \
 	test-connection.c \
 	test-reply.c \
 	test-async-reply.c \
-	test-cookie-life-cycle.c
+	test-cookie-life-cycle.c \
+	test-gerrors.c \
+	test-screen-info.c
+
+#rendertest_SOURCES = rendertest.c
 
 # For convenience, this provides a way to easily run individual unit tests:
 .PHONY: wrappers
@@ -20,7 +25,7 @@ wrappers: test-gx
 # NB: BUILT_SOURCES here a misnomer. We aren't building source, just inserting
 # a phony rule that will generate symlink scripts for running individual tests
 BUILT_SOURCES = wrappers
-	
+
 test_gx_CFLAGS = \
 	-I$(top_srcdir)/ \
 	-I$(top_srcdir)/gx \
@@ -28,6 +33,14 @@ test_gx_CFLAGS = \
 	@EXTRA_CFLAGS@ \
 	@GX_DEP_CFLAGS@
 test_gx_LDADD = @GX_DEP_LIBS@ $(top_builddir)/gx/libgx-@GX_MAJOR_VERSION@.@GX_MINOR_VERSION@.la
+
+#rendertest_CFLAGS = \
+#	-I$(top_srcdir)/ \
+#	-I$(top_srcdir)/gx \
+#	-I$(top_builddir)/gx \
+#	@EXTRA_CFLAGS@ \
+#	@GX_DEP_CFLAGS@
+#rendertest_LDADD = @GX_DEP_LIBS@ $(top_builddir)/gx/libgx-@GX_MAJOR_VERSION@.@GX_MINOR_VERSION@.la
 
 .PHONY: test test-report
 test:

@@ -12,6 +12,7 @@ test_reply (TestGXSimpleFixture *fixture,
             gconstpointer data)
 {
   GXConnection *connection;
+  GXScreen *screen;
   GXWindow *root;
   GXWindowQueryTreeReply *query_tree;
   GList *children;
@@ -27,7 +28,8 @@ test_reply (TestGXSimpleFixture *fixture,
       exit (1);
     }
 
-  root = gx_connection_get_root_window (connection);
+  screen = gx_connection_get_default_screen (connection);
+  root = gx_screen_get_root_window (screen);
 
   query_tree = gx_window_query_tree (root, NULL);
 
@@ -47,6 +49,7 @@ test_reply (TestGXSimpleFixture *fixture,
    * value of some reply is correct */
 
   g_object_unref (root);
+  g_object_unref (screen);
   g_object_unref (connection);
 
   return 0;

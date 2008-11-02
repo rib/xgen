@@ -56,6 +56,7 @@ typedef struct
   GSource	       source;
   GPollFD	       xcb_poll_fd;
   GXConnection	      *connection;
+
 #if 0
   xcb_generic_event_t *event;
   void		      *reply;
@@ -81,10 +82,11 @@ struct _GXConnectionPrivate
 {
   xcb_connection_t  *xcb_connection;
 
+  /** Indicates that connecting to the X server failed. */
+  gboolean	 has_error;
+
   gchar		*display;
-  int		 screen_num;
-  xcb_screen_t	*screen;
-  GXWindow	*root;
+  GXScreen	*screen;
 
   guint		 xcb_source_id;
   GXXCBFDSource *xcb_source;
@@ -111,8 +113,8 @@ struct _GXConnectionPrivate
   GQueue	*errors_queue;
 #endif
 
-  /** Indicates that connecting to the X server failed. */
-  gboolean	 has_error;
+  GList		      *screens;
+  GXScreen	      *default_screen;
 };
 
 
@@ -657,13 +659,16 @@ remove_xcb_event_source (GXConnection *self)
 static void
 connect_to_display (GXConnection *self, const char *display)
 {
+  int preferred_screen_num;
+  xcb_connection_t  *xcb_connection;
+
   if (!display)
-    display = getenv("DISPLAY");
+    display = getenv ("DISPLAY");
 
-  self->priv->xcb_connection =
-    xcb_connect (display, &self->priv->screen_num);
+  xcb_connection = xcb_connect (display, &preferred_screen_num);
+  self->priv->xcb_connection = xcb_connection;
 
-  if (xcb_connection_has_error (self->priv->xcb_connection))
+  if (xcb_connection_has_error (xcb_connection))
     {
       self->priv->has_error = TRUE;
       /* NB: In this error condition, the xcb_connection_t returned
@@ -673,20 +678,65 @@ connect_to_display (GXConnection *self, const char *display)
     }
   else
     {
+      xcb_screen_iterator_t iter;
+      int		    screen_index = 0;
+
       self->priv->has_error = FALSE;
 
-      self->priv->screen =
-	screen_of_connection (self->priv->xcb_connection,
-			      self->priv->screen_num);
+      for (iter = xcb_setup_roots_iterator (xcb_get_setup (xcb_connection));
+	   iter.rem;
+	   xcb_screen_next (&iter))
+	{
+	  xcb_screen_t *screen = iter.data;
+	  GXWindow     *root;
+	  GXScreen     *gx_screen;
 
-      /* The "xid" + "wrap" properties can be used to create GXWindow
-       * objects that wrap and existing window XID */
-      self->priv->root =
-	GX_WINDOW (g_object_new (GX_TYPE_WINDOW,
-				 "connection", self,
-				 "xid", self->priv->screen->root,
-				 "wrap", TRUE,
-				 NULL));
+	  /* TODO: It might be nicer if there were an "xcb-screen" property
+	   * we could use so we could move this code inside gx-screen.c:
+	   */
+
+	  /* NB: The "xid" + "wrap" properties can be used to create GXWindow
+	   * objects that wrap an existing window XID */
+	  root = GX_WINDOW (g_object_new (GX_TYPE_WINDOW,
+					  "connection", self,
+					  "xid", screen->root,
+					  "wrap", TRUE,
+					  NULL));
+
+	  gx_screen =
+	    GX_SCREEN (g_object_new (GX_TYPE_SCREEN,
+				     "root", root,
+				     "default-colormap",
+					screen->default_colormap,
+				     "white-pixel", screen->white_pixel,
+				     "black-pixel", screen->black_pixel,
+				     /* TODO: current_input_masks */
+				     "width", screen->width_in_pixels,
+				     "height", screen->height_in_pixels,
+				     "width-in-millimeters",
+					screen->width_in_millimeters,
+				     "height-in-millimeters",
+					screen->height_in_millimeters,
+				     "min-installed-maps",
+					screen->min_installed_maps,
+				     "max-installed-maps",
+					screen->max_installed_maps,
+				     "root-visual-id", screen->root_visual,
+				     "backing-stores", screen->backing_stores,
+				     "save-unders", screen->save_unders,
+				     "root-depth", screen->root_depth,
+				     /* TODO - list of allowed depths */
+				     NULL
+				     ));
+	  self->priv->screens =
+	    g_list_prepend (self->priv->screens, gx_screen);
+
+	  if (screen_index == preferred_screen_num)
+	    {
+	      self->priv->default_screen = gx_screen;
+	    }
+	  screen_index++;
+	}
 
       add_xcb_event_source (self);
     }
@@ -700,12 +750,6 @@ disconnect_from_display (GXConnection *self)
   remove_xcb_event_source (self);
 
   xcb_disconnect (self->priv->xcb_connection);
-}
-
-GXWindow *
-gx_connection_get_root_window (GXConnection *connection)
-{
-  return g_object_ref (connection->priv->root);
 }
 
 void
@@ -794,6 +838,19 @@ gx_connection_unregister_cookie (GXConnection *self, GXCookie *cookie)
 			 cookie_zombie_finalized_notify,
 			 self);
   g_object_unref (cookie);
+}
+
+GXScreen *
+gx_connection_get_default_screen (GXConnection *self)
+{
+  return g_object_ref (self->priv->default_screen);
+}
+
+GList *
+gx_connection_get_screens (GXConnection *self)
+{
+  g_list_foreach (self->priv->screens, (GFunc)g_object_ref, NULL);
+  return g_list_copy (self->priv->screens);
 }
 
 #include "gx-connection-gen.c"

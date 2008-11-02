@@ -2,6 +2,7 @@
 #include <glib.h>
 #include <stdlib.h>
 
+#include <gx.h>
 #include "test-gx-common.h"
 
 
@@ -40,10 +41,14 @@ main (int argc, char **argv)
   shared_state->argc_addr = &argc;
   shared_state->argv_addr = &argv;
 
+  gx_init (&argc, &argv);
+
   TEST_GX_SIMPLE ("", test_connection);
   TEST_GX_SIMPLE ("", test_reply);
   TEST_GX_SIMPLE ("", test_async_reply);
   TEST_GX_SIMPLE ("", test_cookie_life_cycle);
+  TEST_GX_SIMPLE ("", test_gerrors);
+  TEST_GX_SIMPLE ("", test_screen_info);
 
   g_test_run ();
   return EXIT_SUCCESS;

@@ -26,6 +26,7 @@
 
 #include <gx/gx-cookie.h>
 #include <gx/gx-gcontext.h>
+#include <gx/gx-screen.h>
 #include <gx/gx-types.h>
 #include <gx/gx-mask-value-item.h>
 
@@ -99,9 +100,6 @@ GXConnection *gx_connection_new (const char *display);
 xcb_connection_t *
 gx_connection_get_xcb_connection (GXConnection *connection);
 
-GXWindow *
-gx_connection_get_root_window (GXConnection *connection);
-
 void
 gx_connection_flush (GXConnection *connection, gboolean flush_server);
 
@@ -113,8 +111,9 @@ gx_connection_register_cookie (GXConnection *self, GXCookie *cookie);
 void
 gx_connection_unregister_cookie (GXConnection *self, GXCookie *cookie);
 
-void gx_main (void);
-void gx_main_quit (void);
+GXScreen *gx_connection_get_default_screen (GXConnection *self);
+
+GList *gx_connection_get_screens (GXConnection *self);
 
 /* TODO - split this into seperate files */
 #include <gx/gx-connection-gen.h>

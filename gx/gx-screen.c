@@ -40,16 +40,29 @@ enum
 };
 #endif
 
-#if 0
 enum
 {
   PROP_0,
-  PROP_NAME,
+  PROP_NUMBER,
+  PROP_ROOT_WINDOW,
+  PROP_DEFAULT_COLORMAP,
+  PROP_BLACK,
+  PROP_WHITE,
+  PROP_WIDTH,
+  PROP_HEIGHT,
+  PROP_WIDTH_IN_MILLIMETERS,
+  PROP_HEIGHT_IN_MILLIMETERS,
+  PROP_MIN_INSTALLED_MAPS,
+  PROP_MAX_INSTALLED_MAPS,
+  PROP_ROOT_VISUALID,
+  PROP_BACKING_STORES,
+  PROP_SAVE_UNDERS,
+  PROP_ROOT_DEPTH,
 };
-#endif
 
 struct _GXScreenPrivate
 {
+  guint number;
   GXWindow *root;
   GXColormap default_colormap;
   guint32 white_pixel;
@@ -61,11 +74,13 @@ struct _GXScreenPrivate
   guint16 height_in_millimeters;
   guint16 min_installed_maps;
   guint16 max_installed_maps;
-  GXVisualID root_visual;
+  GXVisualID root_visual_id;
   guint8 backing_stores;
   gboolean save_unders;
   guint8 root_depth;
-  guint8 allowed_depths_len;
+
+  /* TODO: */
+  GList *depths;
 };
 
 
@@ -89,7 +104,7 @@ static void
 gx_screen_class_init (GXScreenClass * klass)
 {
   GObjectClass *gobject_class = G_OBJECT_CLASS (klass);
-  /* GParamSpec *new_param; */
+  GParamSpec *new_param;
 
   gobject_class->finalize = gx_screen_finalize;
 
@@ -126,6 +141,170 @@ gx_screen_class_init (GXScreenClass * klass)
   g_object_class_install_property (gobject_class, PROP_NAME, new_param);
 #endif
 
+  new_param = g_param_spec_uint ("number", /* name */
+			         "The Screen Number", /* nick name */
+			         "The screen number",
+			         0, /* minimum */
+			         G_MAXUINT32, /* maximum */
+			         0, /* default */
+			         G_PARAM_READWRITE
+			         | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (gobject_class,
+				   PROP_NUMBER, new_param);
+
+  new_param = g_param_spec_object ("root", /* name */
+				   "Root Window", /* nick name */
+				   "The root window",
+				   GX_TYPE_WINDOW,
+				   G_PARAM_READWRITE
+				   | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (gobject_class,
+				   PROP_ROOT_WINDOW, new_param);
+
+  new_param = g_param_spec_uint ("default-colormap", /* name */
+			         "Default Colormap", /* nick name */
+			         "the default colormap "
+				 "associated with the root window",
+			         0, /* minimum */
+			         G_MAXUINT32, /* maximum */
+			         0, /* default */
+			         G_PARAM_READWRITE
+			         | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (gobject_class,
+				   PROP_DEFAULT_COLORMAP, new_param);
+
+  new_param = g_param_spec_uint ("black-pixel", /* name */
+			         "Black Pixel", /* nick name */
+			         "The default black pixel color",
+			         0, /* minimum */
+			         G_MAXUINT32, /* maximum */
+			         0, /* default */
+			         G_PARAM_READWRITE
+			         | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (gobject_class,
+				   PROP_BLACK, new_param);
+
+  new_param = g_param_spec_uint ("white-pixel", /* name */
+			         "White Pixel", /* nick name */
+			         "The default white pixel color",
+			         0, /* minimum */
+			         G_MAXUINT32, /* maximum */
+			         0, /* default */
+			         G_PARAM_READWRITE
+			         | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (gobject_class,
+				   PROP_WHITE, new_param);
+
+  new_param = g_param_spec_uint ("width", /* name */
+			         "Width", /* nick name */
+			         "The screen width",
+			         0, /* minimum */
+			         G_MAXUINT16, /* maximum */
+			         0, /* default */
+			         G_PARAM_READWRITE
+			         | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (gobject_class,
+				   PROP_WIDTH, new_param);
+
+  new_param = g_param_spec_uint ("height", /* name */
+			         "Height", /* nick name */
+			         "The screen height",
+			         0, /* minimum */
+			         G_MAXUINT16, /* maximum */
+			         0, /* default */
+			         G_PARAM_READWRITE
+			         | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (gobject_class,
+				   PROP_HEIGHT, new_param);
+
+  new_param = g_param_spec_uint ("width-in-millimeters", /* name */
+			         "Hidth in millimeters", /* nick name */
+			         "The screen width in millimeters",
+			         0, /* minimum */
+			         G_MAXUINT16, /* maximum */
+			         0, /* default */
+			         G_PARAM_READWRITE
+			         | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (gobject_class,
+				   PROP_WIDTH_IN_MILLIMETERS, new_param);
+
+  new_param = g_param_spec_uint ("height-in-millimeters", /* name */
+			         "Height in millimeters", /* nick name */
+			         "The screen height in millimeters",
+			         0, /* minimum */
+			         G_MAXUINT16, /* maximum */
+			         0, /* default */
+			         G_PARAM_READWRITE
+			         | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (gobject_class,
+				   PROP_HEIGHT_IN_MILLIMETERS, new_param);
+
+  new_param = g_param_spec_uint ("min-installed-maps", /* name */
+			         "Minimal installed colormaps", /* nick name */
+			         "The minimum number of installed "
+				 "colormaps",
+			         0, /* minimum */
+			         G_MAXUINT16, /* maximum */
+			         0, /* default */
+			         G_PARAM_READWRITE
+			         | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (gobject_class,
+				   PROP_MIN_INSTALLED_MAPS, new_param);
+
+  new_param = g_param_spec_uint ("max-installed-maps", /* name */
+			         "Maximum installed colormaps", /* nick name */
+			         "The maximum number of installed "
+				 "colormaps",
+			         0, /* minimum */
+			         G_MAXUINT16, /* maximum */
+			         0, /* default */
+			         G_PARAM_READWRITE
+			         | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (gobject_class,
+				   PROP_MAX_INSTALLED_MAPS, new_param);
+
+  new_param = g_param_spec_uint ("root-visual-id", /* name */
+			         "Root Window VisualID", /* nick name */
+			         "The root windows VisualID",
+			         0, /* minimum */
+			         G_MAXUINT32, /* maximum */
+			         0, /* default */
+			         G_PARAM_READWRITE
+			         | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (gobject_class,
+				   PROP_ROOT_VISUALID, new_param);
+
+  new_param = g_param_spec_boolean ("save-unders", /* name */
+				    "Save Unders", /* nick name */
+				    "TRUE of the screen supports save unders",
+				    FALSE, /* default */
+				    G_PARAM_READWRITE
+				    | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (gobject_class,
+				   PROP_SAVE_UNDERS, new_param);
+
+  new_param = g_param_spec_uint ("root-depth", /* name */
+			         "Root Window Depth", /* nick name */
+			         "The root windows depth",
+			         0, /* minimum */
+			         G_MAXUINT8, /* maximum */
+			         0, /* default */
+			         G_PARAM_READWRITE
+			         | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (gobject_class,
+				   PROP_ROOT_DEPTH, new_param);
+
+  new_param = g_param_spec_uint ("backing-stores", /* name */
+			         "Backing Stores", /* nick name */
+			         "Backing Stores",
+			         0, /* minimum */
+			         G_MAXUINT8, /* maximum */
+			         0, /* default */
+			         G_PARAM_READWRITE
+			         | G_PARAM_CONSTRUCT_ONLY);
+  g_object_class_install_property (gobject_class,
+				   PROP_BACKING_STORES, new_param);
+
   /* set up signals */
 #if 0 /* template code */
   klass->signal_member = signal_default_handler;
@@ -151,15 +330,55 @@ static void
 gx_screen_get_property (GObject * object,
 			guint id, GValue * value, GParamSpec * pspec)
 {
-  /* GXScreen* self = GX_SCREEN(object); */
+  GXScreen* self = GX_SCREEN(object);
 
   switch (id)
     {
-#if 0				/* template code */
-    case PROP_NAME:
-      g_value_set_int (value, self->priv->property);
+    case PROP_NUMBER:
+      g_value_set_uint (value, self->priv->number);
       break;
-#endif
+    case PROP_ROOT_WINDOW:
+      g_value_set_object (value, self->priv->root);
+      break;
+    case PROP_DEFAULT_COLORMAP:
+      g_value_set_uint (value, self->priv->default_colormap);
+      break;
+    case PROP_BLACK:
+      g_value_set_uint (value, self->priv->black_pixel);
+      break;
+    case PROP_WHITE:
+      g_value_set_uint (value, self->priv->white_pixel);
+      break;
+    case PROP_WIDTH:
+      g_value_set_uint (value, self->priv->width_in_pixels);
+      break;
+    case PROP_HEIGHT:
+      g_value_set_uint (value, self->priv->height_in_pixels);
+      break;
+    case PROP_MIN_INSTALLED_MAPS:
+      g_value_set_uint (value, self->priv->min_installed_maps);
+      break;
+    case PROP_MAX_INSTALLED_MAPS:
+      g_value_set_uint (value, self->priv->max_installed_maps);
+      break;
+    case PROP_WIDTH_IN_MILLIMETERS:
+      g_value_set_uint (value, self->priv->width_in_millimeters);
+      break;
+    case PROP_HEIGHT_IN_MILLIMETERS:
+      g_value_set_uint (value, self->priv->height_in_millimeters);
+      break;
+    case PROP_BACKING_STORES:
+      g_value_set_uint (value, self->priv->backing_stores);
+      break;
+    case PROP_SAVE_UNDERS:
+      g_value_set_boolean (value, self->priv->save_unders);
+      break;
+    case PROP_ROOT_DEPTH:
+      g_value_set_uint (value, self->priv->root_depth);
+      break;
+    case PROP_ROOT_VISUALID:
+      g_value_set_uint (value, self->priv->root_visual_id);
+      break;
     default:
       G_OBJECT_WARN_INVALID_PROPERTY_ID (object, id, pspec);
       break;
@@ -171,15 +390,56 @@ gx_screen_set_property (GObject * object,
 			guint property_id,
 			const GValue * value, GParamSpec * pspec)
 {
-  /* GXScreen* self = GX_SCREEN(object); */
+  GXScreen* self = GX_SCREEN(object);
 
   switch (property_id)
     {
-#if 0				/* template code */
-    case PROP_NAME:
-      gx_screen_set_property (self, g_value_get_int (value));
+    case PROP_NUMBER:
+      self->priv->number = g_value_get_uint (value);
       break;
-#endif
+    case PROP_ROOT_WINDOW:
+      self->priv->root = g_value_get_object (value);
+      g_object_ref (self->priv->root);
+      break;
+    case PROP_DEFAULT_COLORMAP:
+      self->priv->default_colormap = g_value_get_uint (value);
+      break;
+    case PROP_BLACK:
+      self->priv->black_pixel = g_value_get_uint (value);
+      break;
+    case PROP_WHITE:
+      self->priv->white_pixel = g_value_get_uint (value);
+      break;
+    case PROP_WIDTH:
+      self->priv->width_in_pixels = g_value_get_uint (value);
+      break;
+    case PROP_HEIGHT:
+      self->priv->height_in_pixels = g_value_get_uint (value);
+      break;
+    case PROP_WIDTH_IN_MILLIMETERS:
+      self->priv->width_in_millimeters = g_value_get_uint (value);
+      break;
+    case PROP_HEIGHT_IN_MILLIMETERS:
+      self->priv->height_in_millimeters = g_value_get_uint (value);
+      break;
+    case PROP_MIN_INSTALLED_MAPS:
+      self->priv->min_installed_maps = g_value_get_uint (value);
+      break;
+    case PROP_MAX_INSTALLED_MAPS:
+      self->priv->max_installed_maps = g_value_get_uint (value);
+      break;
+    case PROP_BACKING_STORES:
+      self->priv->backing_stores = g_value_get_uint (value);
+      break;
+    case PROP_SAVE_UNDERS:
+      self->priv->save_unders = g_value_get_boolean (value);
+      break;
+    case PROP_ROOT_DEPTH:
+      self->priv->root_depth = g_value_get_uint (value);
+      break;
+    case PROP_ROOT_VISUALID:
+      self->priv->root_visual_id = g_value_get_uint (value);
+      break;
     default:
       g_warning ("gx_screen_set_property on unknown property");
       return;
@@ -219,3 +479,94 @@ gx_screen_finalize (GObject * object)
   /* destruct your object here */
   G_OBJECT_CLASS (gx_screen_parent_class)->finalize (object);
 }
+
+guint
+gx_screen_get_number (GXScreen *self)
+{
+  return self->priv->number;
+}
+
+GXWindow *
+gx_screen_get_root_window (GXScreen *self)
+{
+  return g_object_ref (self->priv->root);
+}
+
+GXColormap *
+gx_screen_get_default_colormap (GXScreen *self)
+{
+  return self->priv->default_colormap;
+}
+
+guint32
+gx_screen_get_black_pixel (GXScreen *self)
+{
+  return self->priv->black_pixel;
+}
+
+guint32
+gx_screen_get_white_pixel (GXScreen *self)
+{
+  return self->priv->white_pixel;
+}
+
+guint16
+gx_screen_get_width (GXScreen *self)
+{
+  return self->priv->width_in_pixels;
+}
+
+guint16
+gx_screen_get_height (GXScreen *self)
+{
+  return self->priv->height_in_pixels;
+}
+
+guint16
+gx_screen_get_width_in_millimeters (GXScreen *self)
+{
+  return self->priv->width_in_millimeters;
+}
+
+guint16
+gx_screen_get_height_in_millimeters (GXScreen *self)
+{
+  return self->priv->height_in_millimeters;
+}
+
+guint16
+gx_screen_get_minimum_installed_maps (GXScreen *self)
+{
+  return self->priv->min_installed_maps;
+}
+
+guint16
+gx_screen_get_maximum_installed_maps (GXScreen *self)
+{
+  return self->priv->max_installed_maps;
+}
+
+GXVisualID
+gx_screen_get_root_visual_id (GXScreen *self)
+{
+  return self->priv->root_visual_id;
+}
+
+guint8
+gx_screen_get_backing_stores (GXScreen *self)
+{
+  return self->priv->backing_stores;
+}
+
+gboolean
+gx_screen_get_save_unders (GXScreen *self)
+{
+  return self->priv->save_unders;
+}
+
+guint8
+gx_screen_get_root_depth (GXScreen *self)
+{
+  return self->priv->root_depth;
+}
+
