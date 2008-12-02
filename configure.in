@@ -5,11 +5,11 @@ AC_PREREQ(2.59)
 dnl ================================================================
 dnl Package version (i.e. the pretty number that users see)
 dnl ================================================================
-m4_define([gx_major_version], [0])
-m4_define([gx_minor_version], [1])
-m4_define([gx_micro_version], [0])
-m4_define([gx_version],
-          [gx_major_version.gx_minor_version.gx_micro_version])
+m4_define([xgen_major_version], [0])
+m4_define([xgen_minor_version], [1])
+m4_define([xgen_micro_version], [0])
+m4_define([xgen_version],
+          [xgen_major_version.xgen_minor_version.xgen_micro_version])
 
 dnl ================================================================
 dnl Interface version details for libtool
@@ -39,14 +39,14 @@ dnl ================================================================
 #
 #  5. If any interfaces have been removed since the last public release,
 #     then set AGE to 0.
-m4_define([gx_lt_current], 0)
-m4_define([gx_lt_revision], 0)
-m4_define([gx_lt_age], 0)
+m4_define([xgen_lt_current], 0)
+m4_define([xgen_lt_revision], 0)
+m4_define([xgen_lt_age], 0)
 # We do also tell libtool the pretty version also:
-m4_define([gx_lt_release], [gx_version])
+m4_define([xgen_lt_release], [xgen_version])
 
-AC_INIT(gx, [gx_version])
-AC_CONFIG_SRCDIR(gx/gx-connection.c)
+AC_INIT(xgen, [xgen_version])
+AC_CONFIG_SRCDIR(xgen/xgen.c)
 AC_CONFIG_MACRO_DIR([m4])
 AC_CONFIG_HEADERS(config.h)
 AM_INIT_AUTOMAKE([gnu])
@@ -54,28 +54,28 @@ AM_INIT_AUTOMAKE([gnu])
 dnl ================================================================
 dnl More version number stuff
 dnl ================================================================
-GX_MAJOR_VERSION=gx_major_version
-GX_MINOR_VERSION=gx_minor_version
-GX_MICRO_VERSION=gx_micro_version
-GX_VERSION=gx_version
+XGEN_MAJOR_VERSION=xgen_major_version
+XGEN_MINOR_VERSION=xgen_minor_version
+XGEN_MICRO_VERSION=xgen_micro_version
+XGEN_VERSION=xgen_version
 
-AC_SUBST(GX_MAJOR_VERSION)
-AC_SUBST(GX_MINOR_VERSION)
-AC_SUBST(GX_MICRO_VERSION)
-AC_SUBST(GX_VERSION)
+AC_SUBST(XGEN_MAJOR_VERSION)
+AC_SUBST(XGEN_MINOR_VERSION)
+AC_SUBST(XGEN_MICRO_VERSION)
+AC_SUBST(XGEN_VERSION)
 
 
 dnl ================================================================
 dnl libtool versioning
 dnl ================================================================
-GX_LT_CURRENT=gx_lt_current
-GX_LT_REVISION=gx_lt_revision
-GX_LT_AGE=gx_lt_age
-GX_LT_RELEASE=gx_lt_release
-AC_SUBST(GX_LT_CURRENT)
-AC_SUBST(GX_LT_REVISION)
-AC_SUBST(GX_LT_AGE)
-AC_SUBST(GX_LT_RELEASE)
+XGEN_LT_CURRENT=xgen_lt_current
+XGEN_LT_REVISION=xgen_lt_revision
+XGEN_LT_AGE=xgen_lt_age
+XGEN_LT_RELEASE=xgen_lt_release
+AC_SUBST(XGEN_LT_CURRENT)
+AC_SUBST(XGEN_LT_REVISION)
+AC_SUBST(XGEN_LT_AGE)
+AC_SUBST(XGEN_LT_RELEASE)
 
 AM_MAINTAINER_MODE
 
@@ -88,7 +88,7 @@ AC_ARG_ENABLE(debug,
   AC_HELP_STRING([--enable-debug], [enable debuging messages]),
   [
    if test $enableval = yes; then
-     AC_DEFINE(GXGEN_DEBUG, 1, "define to enable debuging")
+     AC_DEFINE(XGENGEN_DEBUG, 1, "define to enable debuging")
      CFLAGS="-g3 -O0"
    else
     if test -z $CFLAGS; then
@@ -233,13 +233,13 @@ dnl ================================================================
 dnl I18n stuff.
 dnl ================================================================
 dnl AC_PROG_INTLTOOL([0.23])
-dnl GETTEXT_PACKAGE=gx
+dnl GETTEXT_PACKAGE=xgen
 dnl AC_SUBST(GETTEXT_PACKAGE)
 dnl AC_SUBST([CONFIG_STATUS_DEPENDENCIES],['$(top_srcdir)/po/LINGUAS'])
 dnl AC_DEFINE_UNQUOTED(GETTEXT_PACKAGE,"$GETTEXT_PACKAGE", [Gettext package])
 dnl ALL_LINGUAS="`cat "$srcdir/po/LINGUAS" | grep -v '^#'`"
-dnl gxlocaledir='${prefix}/${DATADIRNAME}/locale'
-dnl AC_SUBST(gxlocaledir)
+dnl xgenlocaledir='${prefix}/${DATADIRNAME}/locale'
+dnl AC_SUBST(xgenlocaledir)
 dnl AM_GLIB_GNU_GETTEXT
 
 
@@ -263,22 +263,22 @@ AM_CONDITIONAL([BUILD_GTK_DOC],
 dnl ================================================================
 dnl Check for dependency packages.
 dnl ================================================================
-PKG_CHECK_MODULES(GXGEN_DEP, [
+PKG_CHECK_MODULES(XGEN_DEP, [
 		  xcb-proto >= 1.1
                   glib-2.0 >= 2.16
                   libxml-2.0
 ])
-AC_SUBST(GXGEN_DEP_CFLAGS)
-AC_SUBST(GXGEN_DEP_LIBS)
+AC_SUBST(XGEN_DEP_CFLAGS)
+AC_SUBST(XGEN_DEP_LIBS)
 
-PKG_CHECK_MODULES(GX_DEP, [
+PKG_CHECK_MODULES(XGEN_DEP, [
 		  glib-2.0 >= 2.16
                   gobject-2.0
                   xcb
 		  $XCB_DEPENDENCIES
 ])
-AC_SUBST(GX_DEP_CFLAGS)
-AC_SUBST(GX_DEP_LIBS)
+AC_SUBST(XGEN_DEP_CFLAGS)
+AC_SUBST(XGEN_DEP_LIBS)
 
 # Find the xcb-proto protocol descriptions
 AC_MSG_CHECKING(XCBPROTO_XCBINCLUDEDIR)
@@ -321,15 +321,15 @@ dnl Dah Da!
 dnl ================================================================
 AC_OUTPUT(
 Makefile
-tools/Makefile
-gx/Makefile
+xgen/Makefile
 tests/Makefile
+tests/conform/Makefile
 doc/Makefile
 doc/reference/Makefile
-doc/reference/gx/Makefile
-doc/reference/gx/version.xml
+doc/reference/xgen/Makefile
+doc/reference/xgen/version.xml
 dnl po/Makefile.in
-gx-0.1.pc
+xgen-0.1.pc
 )
 
 dnl Configuration output

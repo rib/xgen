@@ -4,12 +4,12 @@
 srcdir=`dirname $0`
 test -z "$srcdir" && srcdir=.
 
-PKG_NAME=gx
+PKG_NAME=xgen
 
 (test -f $srcdir/configure.in \
   && test -f $srcdir/autogen.sh \
-  && test -d $srcdir/gx \
-  && test -f $srcdir/gx/gx-connection.c) || {
+  && test -d $srcdir/xgen \
+  && test -f $srcdir/xgen/xgen.c) || {
     echo -n "**Error**: Directory \"$srcdir\" does not look like the"
     echo " top-level $PKG_NAME directory"
     exit 1

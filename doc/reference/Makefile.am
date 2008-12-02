@@ -1,1 +1,1 @@
-SUBDIRS = gx
+SUBDIRS = xgen

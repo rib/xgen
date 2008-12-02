@@ -1,1 +1,1 @@
-SUBDIRS=conform interactive
+SUBDIRS=conform
