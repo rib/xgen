@@ -1,0 +1,56 @@
+documentation!!!
+
+screen object
+  - black color
+  - white color
+  - root xid
+  - root visual
+  - root depth
+
+gtk-doc the screen property accessors
+
+implement gx_pixmap_new and gx_gcontext_new
+
+rename "connection_" namespace
+For the window object we should rename requests like gx_window_map_window to
+gx_window_map. Do the same for other objects as appropriate.
+
+split xgen API out from gx-gen.c
+
+continue implementing rendertest as a way to identify issues with the API
+
+tests:
+- test the GError mechanisms work
+- test pixmap creation and drawing
+
+GXGen improvements:
+- improve the namespacing abstractions in gx-gen
+- identify query version requests and generate function like the typical
+hand coded versions.
+
+Lame thoughs about namespacing:
+
+current idea is to have a very short prefix, given that the API is broken
+into a number of objects which already have long/descriptive names
+
+  /* glib/gnome X */
+  gx_window_new();
+
+  /* Z's and X's always sound cool... */
+  xx_window_new();
+  zx_window_new();
+
+  /* object oriented X */
+  ox_window_new();
+  oox_window_new();
+
+  /* A change in the way we program X (delta x)... */
+  dx_window_new();
+
+  /* If we can't just use 'x_' 'ex_' sounds the same, great!... */
+  ex_window_new();
+
+  /* fd.o x? free X, bleh, flibble x */
+  fx_window_new();
+
+

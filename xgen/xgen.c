@@ -48,6 +48,7 @@ static const XGenBaseType core_type_definitions[] = {
 };
 #undef BASE_TYPE
 
+static XGenEventHandlers *event_handlers = NULL;
 
 /* Helper function to avoid casting. */
 static char *
@@ -295,6 +296,11 @@ xgen_parse_field_elements (XGenState * state,
 
 	  field->name = g_strdup ("valueparam");
 	  field->definition = def;
+
+	  if (event_handlers && event_handlers->valueparam_notify)
+	    event_handlers->valueparam_notify (valueparam);
+	  if (event_handlers && event_handlers->definition_notify)
+	    event_handlers->definition_notify (def);
 	}
       else
 	continue;
@@ -387,7 +393,7 @@ xgen_parse_reply_fields (XGenState * state,
  * full parsing of the xcb definitions in dependency order.
  */
 static void
-xgen_open_xcb_proto_file (XGenState * state, char *filename)
+xgen_open_xcb_proto_file (XGenState * state, const char *filename)
 {
   xmlDoc *doc;
   xmlNode *root, *elem;
@@ -395,10 +401,21 @@ xgen_open_xcb_proto_file (XGenState * state, char *filename)
   char *extension_header;
   XGenExtension *extension = NULL;
 
+  g_assert (filename);
+
   /* Ignore text nodes consisting entirely of whitespace. */
   xmlKeepBlanksDefault (0);
 
-  doc = xmlParseFile (filename);
+  if (filename[0] != '/')
+    {
+      char *full_path =
+	g_strdup_printf ("%s/%s", XCBPROTO_XCBINCLUDEDIR, filename);
+      doc = xmlParseFile (full_path);
+      g_free (full_path);
+    }
+  else
+    doc = xmlParseFile (filename);
+
   if (!doc)
     return;
 
@@ -439,6 +456,7 @@ xgen_open_xcb_proto_file (XGenState * state, char *filename)
 
 	  *base_type = core_type_definitions[i];
 	  def->name = g_strdup (core_type_definitions[i]._parent.name);
+	  def->extension = extension;
 
 	  g_assert (def->name);
 
@@ -446,6 +464,12 @@ xgen_open_xcb_proto_file (XGenState * state, char *filename)
 	    g_list_prepend (extension->all_definitions, base_type);
 	  extension->base_types =
 	    g_list_prepend (extension->base_types, base_type);
+
+	  if (event_handlers && event_handlers->base_notify)
+	    event_handlers->base_notify (base_type);
+
+	  if (event_handlers && event_handlers->definition_notify)
+	    event_handlers->definition_notify (def);
 	}
     }
 
@@ -574,6 +598,8 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 
 	      extension->replys =
 		g_list_prepend (extension->replys, reply);
+	      if (event_handlers && event_handlers->reply_notify)
+		event_handlers->reply_notify (reply);
 
 	      /* FIXME: NB this is duplicated below for non reply definitions
 	       * which is a bit yukky. */
@@ -581,8 +607,14 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 	      extension->all_definitions =
 		g_list_prepend (extension->all_definitions, reply_def);
 
+	      if (event_handlers && event_handlers->definition_notify)
+		event_handlers->definition_notify (reply_def);
+
 	      request->reply = reply;
 	    }
+
+          if (event_handlers && event_handlers->request_notify)
+	    event_handlers->request_notify (request);
 	}
       else if (strcmp (xgen_xml_get_node_name (elem), "event") == 0)
 	{
@@ -625,6 +657,8 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 	  event->fields = fields;
 
 	  extension->events = g_list_prepend (extension->events, event);
+          if (event_handlers && event_handlers->event_notify)
+	    event_handlers->event_notify (event);
 	}
       else if (strcmp (xgen_xml_get_node_name (elem), "eventcopy") == 0)
 	{
@@ -648,6 +682,8 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 	  event->is_copy = TRUE;
 
 	  extension->events = g_list_prepend (extension->events, event);
+          if (event_handlers && event_handlers->event_notify)
+	    event_handlers->event_notify (event);
 	}
       else if (strcmp (xgen_xml_get_node_name (elem), "error") == 0)
 	{
@@ -684,6 +720,8 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 	  error->fields = fields;
 
 	  extension->errors = g_list_prepend (extension->errors, error);
+          if (event_handlers && event_handlers->error_notify)
+	    event_handlers->error_notify (error);
 	}
       else if (strcmp (xgen_xml_get_node_name (elem), "errorcopy") == 0)
 	{
@@ -707,6 +745,8 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 	  error->is_copy = TRUE;
 
 	  extension->errors = g_list_prepend (extension->errors, error);
+          if (event_handlers && event_handlers->error_notify)
+	    event_handlers->error_notify (error);
 	}
       else if (strcmp (xgen_xml_get_node_name (elem), "struct") == 0)
 	{
@@ -722,6 +762,8 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 				       extension, elem);
 	  extension->structs =
 	    g_list_prepend (extension->structs, struct_def);
+          if (event_handlers && event_handlers->struct_notify)
+	    event_handlers->struct_notify (struct_def);
 	}
       else if (strcmp (xgen_xml_get_node_name (elem), "xidunion") == 0)
 	{
@@ -737,6 +779,8 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 				       extension, elem);
 	  extension->xid_unions =
 	    g_list_prepend (extension->xid_unions, xid_union);
+          if (event_handlers && event_handlers->xid_union_notify)
+	    event_handlers->xid_union_notify (xid_union);
 	}
       else if (strcmp (xgen_xml_get_node_name (elem), "union") == 0)
 	{
@@ -752,6 +796,8 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 				       extension, elem);
 	  extension->unions =
 	    g_list_prepend (extension->unions, union_def);
+          if (event_handlers && event_handlers->union_notify)
+	    event_handlers->union_notify (union_def);
 	}
       else if (strcmp (xgen_xml_get_node_name (elem), "xidtype") == 0)
 	{
@@ -765,6 +811,8 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 	  xid_def->size = 4;
 	  extension->base_types =
 	    g_list_prepend (extension->base_types, xid_def);
+          if (event_handlers && event_handlers->base_notify)
+	    event_handlers->base_notify (XGEN_BASE_TYPE_DEF (xid_def));
 	}
       else if (strcmp (xgen_xml_get_node_name (elem), "enum") == 0)
 	{
@@ -778,6 +826,8 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 	  enum_def->items = xgen_parse_item_elements (state, elem);
 	  extension->enums =
 	    g_list_prepend (extension->enums, enum_def);
+          if (event_handlers && event_handlers->enum_notify)
+	    event_handlers->enum_notify (enum_def);
 	}
       else if (strcmp (xgen_xml_get_node_name (elem), "typedef") == 0)
 	{
@@ -796,6 +846,8 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 
 	  extension->typedefs =
 	    g_list_prepend (extension->typedefs, typedef_def);
+          if (event_handlers && event_handlers->typedef_notify)
+	    event_handlers->typedef_notify (typedef_def);
 	}
 
       if (def)
@@ -805,6 +857,9 @@ xgen_parse_xcb_proto_file (XGenState *state, XGenExtension *extension)
 	  g_assert (def->name);
 	  extension->all_definitions =
 	    g_list_prepend (extension->all_definitions, def);
+
+	  if (event_handlers && event_handlers->definition_notify)
+	    event_handlers->definition_notify (def);
 	}
     }
 
@@ -995,5 +1050,24 @@ xgen_parse_xcb_proto_files (GList *files)
   /* FIXME: Clean things up if there was an error resolving things! */
 
   return state;
+}
+
+void
+xgen_set_handlers (XGenEventHandlers *handlers)
+{
+    event_handlers = handlers;
+}
+
+
+void *
+xgen_definition_get_private (const XGenDefinition *def)
+{
+  return def->_private;
+}
+
+void
+xgen_definition_set_private (XGenDefinition *def, void *data)
+{
+  def->_private = data;
 }
 

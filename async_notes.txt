@@ -1,0 +1,42 @@
+
+GXCookie *
+gx_window_query_tree_async (GXWindow *window)
+{
+    GXConnection *connection = gx_window_get_connection (window);
+    xcb_query_tree_cookie_t xcb_cookie;
+
+    xcb_cookie =
+            xcb_query_tree(
+                    gx_connection_get_xcb_connection (connection),
+                    gx_drawable_get_xid (
+                            GX_DRAWABLE(window)));
+
+    cookie = gx_cookie_new (connection, GX_WINDOW_QUERY_TREE, xcb_cookie);
+
+    g_object_unref (connection);
+
+    return cookie;
+}
+
+GXQueryTreeReply *
+gx_window_query_tree_wait (GXCookie *cookie)
+{
+    GXConnection *connection = gx_cookie_get_connection (cookie);
+    xcb_generic_error_t *xcb_error;
+    xcb_query_tree_cookie_t xcb_cookie;
+    GXQueryTreeReply *reply = g_slice_new (GXQueryTreeReply);
+
+    reply->connection = connection;
+
+    xcb_cookie = gx_cookie_get_xcb_query_tree_cookie (xcb_cookie);
+    reply->x11_reply = (GXQueryTreeX11Reply *)
+            xcb_query_tree_reply (
+                    gx_connection_get_xcb_connection (connection),
+                    xcb_cookie,
+                    &xcb_error);
+    g_object_unref (connection);
+
+    return reply;
+}
+
+

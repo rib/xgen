@@ -12,5 +12,5 @@ Description: XCB protocol specs parser and toolkit
 Version: @XGEN_VERSION@
 Libs: -L${libdir} -lxgen-${apiversion}
 Cflags: -I${includedir}/xgen-${apiversion}
-Requires: xcb-proto glib-2.0 libxml
+Requires: @XGEN_PKG_REQUIRES@
 
